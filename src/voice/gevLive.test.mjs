@@ -87,7 +87,7 @@ test('a Live error closes the hot microphone instead of leaving an idle-looking 
   } finally { env.restore(); }
 });
 
-function setup(runner = async (name) => ({ ok: true, action: name }), radioLayer = null) {
+function setup(runner = async (name) => ({ ok: true, action: name }), radioLayer = null, backendModel = 'gpt-5.6-luna') {
   const old = { window: globalThis.window, navigator: globalThis.navigator,
     document: globalThis.document, fetch: globalThis.fetch };
   let stopped = false;
@@ -105,7 +105,7 @@ function setup(runner = async (name) => ({ ok: true, action: name }), radioLayer
   globalThis.fetch = async () => ({ ok: true, json: async () => ({
     session: { id: 's1' }, transport: { type: 'webrtc', sdp: 'answer-sdp' },
     maxSessionSeconds: 600, voiceUsdPerMinute: 0.05,
-    backendRates: { input: 2, cachedInput: 0.2, output: 12 },
+    backendModel,
   }) });
   const controller = new Live({ runner, ui, radioLayer });
   return { controller, ui, track, audio, stream, get stopped() { return stopped; }, restore() {
@@ -223,7 +223,7 @@ test('cumulative voice seconds and backend response IDs are de-duplicated; timeo
     const cost = env.controller.liveCostState();
     assert.equal(cost.seconds, 30);
     assert.ok(Math.abs(cost.voiceUsd - 0.025) < 1e-9);
-    assert.ok(Math.abs(cost.backendUsd - 0.00248) < 1e-9);
+    assert.ok(Math.abs(cost.backendUsd - 0.000248) < 1e-9);
     const stopping = env.controller.stop();
     env.controller.liveCloseResolve(false);
     await stopping;
@@ -248,15 +248,38 @@ test('speech fragments do not cancel a delegated task or expose transcripts', as
   } finally { env.restore(); }
 });
 
-test('Terra large-context rates and unsupported cache-write usage are conservative', () => {
-  const env = setup();
+for (const [model, expected] of [['gpt-5.6-luna', 0.0858], ['gpt-5.6-terra', 0.858]]) {
+test(`${model} pricing, UI and diagnostics follow the server-selected backend`, async () => {
+  const env = setup(undefined, null, model);
   try {
+    await env.controller.start(); started(env.controller);
+    assert.equal(env.controller.getDiagnostics().backendModel, model);
+    assert.match(env.ui.tierButton.title, new RegExp(model));
+    assert.match(env.ui.costValue.title, model.endsWith('luna') ? /GPT-5.6 Luna/ : /GPT-5.6 Terra/);
     env.controller.recordBackendUsage('big', {
       input_tokens: 300_000, output_tokens: 1000,
       input_tokens_details: { cached_tokens: 100_000, cache_write_tokens: 10_000 },
     });
-    assert.ok(Math.abs(env.controller.liveBackendUsd - 0.858) < 1e-9);
+    assert.ok(Math.abs(env.controller.liveBackendUsd - expected) < 1e-9);
     assert.equal(env.controller.liveUsageIncomplete, true);
+    const closing = env.controller.stop();
+    env.controller.dc.emit('message', { type: 'session.closed', usage: { seconds: 15 } });
+    await closing;
+  } finally { env.restore(); }
+});
+}
+
+test('unknown backend metadata is marked incomplete and never priced as Luna', async () => {
+  const env = setup(undefined, null, 'unexpected-model');
+  try {
+    await env.controller.start(); started(env.controller);
+    env.controller.recordBackendUsage('unknown', { input_tokens: 1000, output_tokens: 100 });
+    assert.equal(env.controller.getDiagnostics().backendModel, 'unknown');
+    assert.equal(env.controller.liveCostState().incomplete, true);
+    assert.ok(Math.abs(env.controller.liveBackendUsd - 0.0032) < 1e-9);
+    const closing = env.controller.stop();
+    env.controller.dc.emit('message', { type: 'session.closed', usage: { seconds: 15 } });
+    await closing;
   } finally { env.restore(); }
 });
 

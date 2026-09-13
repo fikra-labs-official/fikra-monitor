@@ -34,9 +34,11 @@ On the local **development server**, the bottom-right **POWER UP / Provider Sett
 
 ## Recommended voice pairing
 
-Our recommended setup uses one user-supplied `OPENAI_API_KEY`: [GPT-Live 1](https://developers.openai.com/api/docs/models/gpt-live-1) handles full-duplex speech, while [GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra) receives [delegated map commands, search, and complex reasoning](https://developers.openai.com/api/docs/guides/live-delegation) through Responses. The current default voice engine is `live`, with the Russian masculine `meridian` voice and no visible transcript. After changing configuration, restart the dev server and check the **LIVE** badge. For the legacy mode, set `OPENAI_VOICE_ENGINE=realtime`.
+Our recommended setup uses one user-supplied `OPENAI_API_KEY`: [GPT-Live 1](https://developers.openai.com/api/docs/models/gpt-live-1) handles full-duplex speech, while [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna) receives [delegated map commands, search, and complex reasoning](https://developers.openai.com/api/docs/guides/live-delegation) through Responses. The current default voice engine is `live`, with the Russian masculine `meridian` voice and no visible transcript. After changing configuration, restart the dev server and check the **LIVE** badge. For the legacy mode, set `OPENAI_VOICE_ENGINE=realtime`.
 
-This is our recommendation for this project, not a proven superiority benchmark or the cheapest option. GPT-Live 1 costs $0.05/minute, including silence; Terra usage is billed separately. The browser's 600-second voice auto-close is an app setting, not a provider cap. Check [current prices](https://developers.openai.com/api/docs/pricing) before use.
+This is our recommendation for this project, not a proven superiority benchmark or the cheapest option. GPT-Live 1 costs $0.05/minute, including silence; Luna usage is billed separately. The browser's 600-second voice auto-close is an app setting, not a provider cap. Check [current prices](https://developers.openai.com/api/docs/pricing) before use.
+
+Luna is the cost-sensitive default for map commands. Terra may be more reliable for ambiguous requests and long action chains; the quality difference has not been measured on your scenarios. At equal token counts Luna is 10x cheaper, but Live voice pricing is unchanged. To select Terra manually, set `OPENAI_LIVE_BACKEND_MODEL=gpt-5.6-terra` in your private `.env` and restart the server. There is no automatic upgrade to the more expensive model.
 
 ## Keys, costs, and exposure
 

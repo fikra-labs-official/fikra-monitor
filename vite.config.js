@@ -1446,8 +1446,7 @@ async function getOpenSkyToken() {
       const expiresIn = Number(data?.expires_in);
       if (!res.ok || !accessToken) {
         if (!_openskyAuthWarned) {
-          const detail = data?.error_description || data?.error || `HTTP ${res.status}`;
-          console.warn('[OpenSky] OAuth client_credentials failed:', detail);
+          console.warn('[OpenSky] OAuth client_credentials failed; HTTP status:', res.status);
           _openskyAuthWarned = true;
         }
         _openskyToken = null;
@@ -3210,7 +3209,7 @@ function openSkyProxy() {
           );
           res.end(body);
         } catch (e) {
-          console.error('[OpenSky Proxy]', e.message);
+          console.error('[OpenSky Proxy] Upstream request failed.');
           if (_openskyCacheBody) {
             const cachedMeta = _openskyCacheMeta || {
               requestedMode: normalizeOpenSkyAuthMode(process.env.OPENSKY_AUTH_MODE),
@@ -5009,7 +5008,7 @@ function trackBackfillProxies() {
 }
 
 /**
- * Map policy shared by the legacy Realtime assistant and Live's Terra backend.
+ * Map policy shared by the legacy Realtime assistant and Live's Responses backend.
  */
 export const GEV_BACKEND_INSTRUCTIONS = [
   'You are Fikra Monitor Voice Control, a concise voice controller for the Fikra Labs Cesium geospatial app Fikra Monitor.',

@@ -67,17 +67,30 @@ For Google and OpenAI, configure [Google Cloud budget alerts and quotas](https:/
 
 ## 4. Checks and troubleshooting
 
-### Voice: GPT-Live 1 with GPT-5.6 Terra
+### Voice: GPT-Live 1 with GPT-5.6 Luna
 
-The same `OPENAI_API_KEY` is used. `OPENAI_VOICE_ENGINE=live` is the default: GPT-Live 1 handles Russian conversation with the masculine `meridian` voice, while GPT-5.6 Terra handles map tools, place searches and reasoning. Spoken input is not displayed as a transcript. The short HUD summary remains a separate `OPENAI_HUD_SUMMARY_MODEL` task.
+`OPENAI_LIVE_BACKEND_MODEL=gpt-5.6-luna` selects the cost-sensitive command model. To select Terra manually, use `OPENAI_LIVE_BACKEND_MODEL=gpt-5.6-terra`, restart the server and begin a new voice session. The LIVE badge tooltip identifies the selected model. There is no automatic upgrade to Terra. Both use Standard processing, not Fast mode.
+
+[OpenAI prices](https://developers.openai.com/api/docs/pricing), checked September 13, 2026, USD per million tokens with input context up to 272K:
+
+| Model | Input | Cached input | Output, including reasoning |
+|---|---:|---:|---:|
+| GPT-5.6 Luna | $0.20 | $0.02 | $1.20 |
+| GPT-5.6 Terra | $2.00 | $0.20 | $12.00 |
+
+For example, 10,000 uncached input and 1,000 output tokens cost about $0.0032 on Luna or $0.032 on Terra. This is not a per-command quote: instructions, history and tool results count, and one command may require several requests. Above 272K input tokens, input rates double and output rates increase 1.5x; cache writes have their own higher rate. Live voice and external API charges are additional.
+
+Luna is a reasonable starting point for place lookup, navigation and layer toggles. Terra may help with ambiguous names, complex conditions and multi-step analysis. This is an expectation based on model roles, not a measured map-agent comparison. Changing the model cannot supply missing boundaries, fix Google/TomTom failures or add unavailable 3D coverage.
+
+The same `OPENAI_API_KEY` is used. `OPENAI_VOICE_ENGINE=live` is the default: GPT-Live 1 handles Russian conversation with the masculine `meridian` voice, while GPT-5.6 Luna handles map tools, place searches and reasoning. Spoken input is not displayed as a transcript. The short HUD summary remains a separate `OPENAI_HUD_SUMMARY_MODEL` task.
 
 Restart the server after changing `.env`, then reload the page. The voice control should say **LIVE**. Click the microphone, grant permission, and try “Fly to Istanbul” or “Outline Andalusia, Spain”. Model choice does not create missing geographical boundaries or 3D coverage.
 
 Click the microphone again to end the session. The browser auto-closes after 10 minutes (`OPENAI_LIVE_MAX_SESSION_SECONDS`, 60–600 seconds), and never reconnects automatically. These application guards are **not provider-side billing caps**; a browser/transport failure can leave final usage unconfirmed.
 
-According to [OpenAI pricing](https://developers.openai.com/api/docs/pricing), checked September 13, 2026, Live costs **$0.05 per minute of open-session time**, including silence. WebRTC creation has a 15-second minimum charge credited toward session duration. Terra tokens and other provider requests are billed separately. Ten minutes therefore cost about **$0.50 for voice plus backend/provider usage**. The in-app counter is an estimate, not a billing statement. No paid voice session starts before a microphone click.
+According to [OpenAI pricing](https://developers.openai.com/api/docs/pricing), checked September 13, 2026, Live costs **$0.05 per minute of open-session time**, including silence. WebRTC creation has a 15-second minimum charge credited toward session duration. Luna tokens and other provider requests are billed separately. Ten minutes therefore cost about **$0.50 for voice plus backend/provider usage**. The in-app counter is an estimate, not a billing statement. No paid voice session starts before a microphone click.
 
-For the legacy fallback, set `OPENAI_VOICE_ENGINE=realtime`, restart and reload. Existing `OPENAI_REALTIME_MODEL`, `OPENAI_REALTIME_MODEL_MINI` and `OPENAI_REALTIME_VOICE` settings remain available; the MINI toggle applies only in this fallback mode. Unavailable models are not silently substituted. See [Live delegation](https://developers.openai.com/api/docs/guides/live-delegation) and [GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra).
+For the legacy fallback, set `OPENAI_VOICE_ENGINE=realtime`, restart and reload. Existing `OPENAI_REALTIME_MODEL`, `OPENAI_REALTIME_MODEL_MINI` and `OPENAI_REALTIME_VOICE` settings remain available; the MINI toggle applies only in this fallback mode. Unavailable models are not silently substituted. See [Live delegation](https://developers.openai.com/api/docs/guides/live-delegation) and [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna).
 
 ### Verification
 

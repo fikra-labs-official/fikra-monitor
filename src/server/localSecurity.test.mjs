@@ -61,3 +61,11 @@ test('provider errors redact both known credentials and URL/bearer secrets', () 
   assert.equal(safeProviderError('https://example.org/?key=hidden&other=safe', {}), 'https://example.org/?key=[redacted]&other=safe');
   assert.equal(safeProviderError('Authorization: Bearer hidden', {}), 'Authorization: Bearer [redacted]');
 });
+
+test('OpenSky failure logs do not interpolate raw provider descriptions or exceptions', () => {
+  const source = fs.readFileSync(new URL('../../vite.config.js', import.meta.url), 'utf8');
+  assert.match(source, /console\.warn\('\[OpenSky\] OAuth client_credentials failed; HTTP status:', res\.status\)/);
+  assert.match(source, /console\.error\('\[OpenSky Proxy\] Upstream request failed\.'\)/);
+  assert.doesNotMatch(source, /const detail = data\?\.error_description/);
+  assert.doesNotMatch(source, /console\.(?:warn|error)\('\[OpenSky[^\n]*\b(?:e|err|error)\.message/);
+});

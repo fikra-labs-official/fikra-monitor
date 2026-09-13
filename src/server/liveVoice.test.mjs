@@ -30,10 +30,11 @@ async function fixture(t, { fetchImpl, ...options } = {}) {
   }) };
 }
 
-test('Live uses the requested voice and Terra backend, preserving optional tool parameters', () => {
+test('Live defaults to Luna and standard pricing, preserving voice and optional tool parameters', () => {
   const result = liveSessionRequest({ sdp, tools, instructions: 'Map rules', env });
   assert.equal(result.session.model, 'gpt-live-1');
-  assert.equal(result.session.delegation.responses.model, 'gpt-5.6-terra');
+  assert.equal(result.session.delegation.responses.model, 'gpt-5.6-luna');
+  assert.equal(result.session.delegation.responses.service_tier, 'default');
   assert.equal(result.session.audio.output.voice, 'meridian');
   assert.equal(result.session.store, false);
   assert.equal(result.session.delegation.responses.max_output_tokens, 2048);
@@ -46,9 +47,17 @@ test('Live uses the requested voice and Terra backend, preserving optional tool 
   assert.match(LIVE_INSTRUCTIONS, /Interruption policy/);
   assert.match(LIVE_INSTRUCTIONS, /Speak Russian/);
 });
+test('Terra remains an explicit server-side option, not an automatic upgrade', async (t) => {
+  const { request, calls } = await fixture(t, { env: { ...env, OPENAI_LIVE_BACKEND_MODEL: 'gpt-5.6-terra' } });
+  const result = await (await request()).json();
+  assert.equal(result.backendModel, 'gpt-5.6-terra');
+  assert.deepEqual(result.backendRates, { input: 2, cachedInput: 0.2, output: 12 });
+  assert.equal(JSON.parse(calls[0][1].body).session.delegation.responses.model, result.backendModel);
+});
 test('unsupported model overrides fail explicitly instead of silently substituting', () => {
   assert.throws(() => liveSessionRequest({ sdp, tools, instructions: '', env: { OPENAI_LIVE_MODEL: 'typo' } }));
   assert.throws(() => liveSessionRequest({ sdp, tools, instructions: '', env: { OPENAI_LIVE_BACKEND_MODEL: 'typo' } }));
+  assert.throws(() => liveSessionRequest({ sdp, tools, instructions: '', env: { OPENAI_LIVE_BACKEND_MODEL: 'constructor' } }));
 });
 test('session broker sends key only upstream and projects only public SDP/session fields', async (t) => {
   const { request, calls } = await fixture(t);
@@ -57,7 +66,9 @@ test('session broker sends key only upstream and projects only public SDP/sessio
   assert.equal(res.headers.get('cache-control'), 'no-store');
   const result = await res.json();
   assert.deepEqual(result.session, { id: 'live_test' });
-  assert.equal(result.backendModel, 'gpt-5.6-terra');
+  assert.equal(result.backendModel, 'gpt-5.6-luna');
+  assert.deepEqual(result.backendRates, { input: 0.2, cachedInput: 0.02, output: 1.2 });
+  assert.equal(JSON.parse(calls[0][1].body).session.delegation.responses.model, result.backendModel);
   assert.equal(result.voiceUsdPerMinute, 0.05);
   assert.equal(result.maxSessionSeconds, 600);
   assert.doesNotMatch(JSON.stringify(result), /NEVER_RETURN|test-only-not-a-real-key|Map rules/);

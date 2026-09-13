@@ -1,4 +1,5 @@
 import { formatCostUsd, normalizeCostLimits } from './voiceCost.js';
+import { DEFAULT_LIVE_BACKEND_MODEL, LIVE_BACKENDS } from './liveModels.js';
 
 const SESSION_URL = '/api/live/session';
 const ICE_TIMEOUT_MS = 10_000;
@@ -90,7 +91,8 @@ export function createGevLiveControllerClass(Base) {
       this.liveBillableEndedAt = 0;
       this.liveMaxSeconds = 600;
       this.liveVoiceRate = 0.05;
-      this.liveBackendRates = { input: 2, cachedInput: 0.2, output: 12 };
+      this.liveBackendModel = DEFAULT_LIVE_BACKEND_MODEL;
+      this.liveBackendRates = LIVE_BACKENDS[this.liveBackendModel];
       this.liveVoiceSeconds = 0;
       this.liveBackendUsd = 0;
       this.liveUsageIncomplete = false;
@@ -217,11 +219,15 @@ export function createGevLiveControllerClass(Base) {
         if (result?.transport?.type !== 'webrtc' || !result.transport.sdp) throw new Error('Некорректный SDP Live');
         this.liveMaxSeconds = Math.min(600, Math.max(1, nonnegative(result.maxSessionSeconds) || 600));
         this.liveVoiceRate = nonnegative(result.voiceUsdPerMinute) || 0.05;
-        this.liveBackendRates = {
-          input: nonnegative(result.backendRates?.input) || 2,
-          cachedInput: nonnegative(result.backendRates?.cachedInput) || 0.2,
-          output: nonnegative(result.backendRates?.output) || 12,
-        };
+        // Missing/unknown server metadata cannot be priced as the cheaper model.
+        this.liveBackendModel = Object.hasOwn(LIVE_BACKENDS, result.backendModel)
+          ? result.backendModel : 'unknown';
+        this.liveBackendRates = LIVE_BACKENDS[this.liveBackendModel] || LIVE_BACKENDS['gpt-5.6-terra'];
+        if (this.liveBackendModel === 'unknown') {
+          this.liveUsageIncomplete = true;
+          this.liveBackendUsageIncomplete = true;
+        }
+        this.syncCostUi();
         await localPc.setRemoteDescription({ type: 'answer', sdp: result.transport.sdp });
         // The channel may already be open, but commands are gated on session.started.
         if (!this.liveReady) {
@@ -594,7 +600,8 @@ export function createGevLiveControllerClass(Base) {
       const output = nonnegative(usage.output_tokens);
       const cached = Math.min(input, nonnegative(usage.input_tokens_details?.cached_tokens));
       const rates = input > 272_000
-        ? { input: 4, cachedInput: 0.4, output: 18 }
+        ? { input: this.liveBackendRates.input * 2, cachedInput: this.liveBackendRates.cachedInput * 2,
+          output: this.liveBackendRates.output * 1.5 }
         : this.liveBackendRates;
       if (nonnegative(usage.input_tokens_details?.cache_write_tokens || usage.cache_write_tokens)) {
         this.liveUsageIncomplete = true;
@@ -632,12 +639,13 @@ export function createGevLiveControllerClass(Base) {
         this.ui.tierButton.textContent = 'LIVE';
         this.ui.tierButton.disabled = true;
         this.ui.tierButton.setAttribute('aria-pressed', 'true');
-        this.ui.tierButton.title = 'gpt-live-1 + gpt-5.6-terra Responses · голос $0.05/мин (минимум 15 сек), backend по токенам';
+        this.ui.tierButton.title = `gpt-live-1 + ${this.liveBackendModel} Responses · голос $0.05/мин (минимум 15 сек), backend по токенам`;
       }
       if (this.ui?.costValue) {
         this.ui.costValue.textContent = `${formatCostUsd(state.totalUsd)}${state.incomplete ? '*' : ''}`;
         this.ui.costValue.dataset.level = state.totalUsd >= this.voiceLimits?.warnUsd ? 'warn' : 'normal';
-        this.ui.costValue.title = `Оценка: голос ${formatCostUsd(state.voiceUsd)}; GPT-5.6 Terra ${this.liveBackendUsageIncomplete ? 'расход неполный' : formatCostUsd(state.backendUsd)}${state.incomplete ? '; * общий учёт неполный' : ''}`;
+        const backendLabel = LIVE_BACKENDS[this.liveBackendModel]?.label || 'модель не подтверждена';
+        this.ui.costValue.title = `Оценка: голос ${formatCostUsd(state.voiceUsd)}; ${backendLabel} ${this.liveBackendUsageIncomplete ? 'расход неполный' : formatCostUsd(state.backendUsd)}${state.incomplete ? '; * общий учёт неполный' : ''}`;
       }
     }
 
@@ -649,7 +657,7 @@ export function createGevLiveControllerClass(Base) {
     }
     getDiagnostics() {
       return { ...super.getDiagnostics(), engine: 'live', model: 'gpt-live-1',
-        backendModel: 'gpt-5.6-terra', cost: this.liveCostState() };
+        backendModel: this.liveBackendModel, cost: this.liveCostState() };
     }
   };
 }
