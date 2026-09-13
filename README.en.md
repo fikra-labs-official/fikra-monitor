@@ -4,6 +4,8 @@
 
 An English-language companion to the Russian [Fikra Monitor README](README.md). This is a fork of [God's Eye View](https://github.com/bilawalsidhu/gods-eye-view), created by Bilawal Sidhu. His original [product tour](https://github.com/bilawalsidhu/gods-eye-view#readme) remains available upstream. The MIT code license preserves his copyright; bundled data, models, and media have separate terms in [LICENSE](LICENSE), [DATA_SOURCES.md](DATA_SOURCES.md), [public/models/README.md](public/models/README.md), and [docs/media/README.md](docs/media/README.md).
 
+The optional voice mode uses GPT-Live 1 for conversation and GPT-5.6 Luna for map commands and search by default. It requires your own `OPENAI_API_KEY`.
+
 This is an exploratory visualization of public signals, not an authoritative operational picture. Flights, vessels, satellites, earthquakes, fires, and public cameras may be delayed or incomplete; some motion and camera poses are modeled. Do not use it for navigation, emergency response, or other safety-critical decisions.
 
 [Русский](README.md) · [Full setup](docs/setup.en.md) · [Security](SECURITY.md) · [Data sources](DATA_SOURCES.md)
