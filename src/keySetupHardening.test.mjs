@@ -125,6 +125,8 @@ test('Windows hardening applies and then verifies the exact restricted DACL', ()
   assert.match(calls[2].args.at(-1), /seen\.ContainsKey/);
   assert.match(calls[2].args.at(-1), /FileSystemRights -ne \$full/);
   assert.match(calls[2].args.at(-1), /seen\.Count -ne 3/);
+  assert.match(calls[2].args.at(-1), /foreach \(\$rule in \$rules\) \{\n\s+\$ruleSid/);
+  assert.doesNotMatch(calls[2].args.at(-1), /\{\s*;/);
 });
 
 test('Windows hardening bypasses PATH-shadowed native ACL tools', () => {
@@ -271,12 +273,14 @@ test('Windows production hardener applies its exact DACL with native tools', {
     const nativeCalls = [];
     const hardened = hardenCredentialFile(filepath, {
       spawn(command, args, options) {
-        const result = spawnSync(command, args, options);
+        const result = spawnSync(command, args, command.endsWith('powershell.exe')
+          ? { ...options, stdio: 'pipe', encoding: 'utf8' } : options);
         nativeCalls.push({
           tool: path.win32.basename(command),
           status: result.status,
           signal: result.signal,
           errorCode: result.error?.code,
+          errorId: result.stderr?.match(/FullyQualifiedErrorId\s*:\s*([A-Za-z0-9_.:-]+)/)?.[1],
         });
         return result;
       },

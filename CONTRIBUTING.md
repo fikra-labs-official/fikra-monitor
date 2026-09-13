@@ -33,7 +33,7 @@ The highest-leverage places to jump in:
 - **No framework.** Vanilla JS + [CesiumJS](https://cesium.com/platform/cesiumjs/) + [Vite](https://vitejs.dev/).
 - **UI lives in `src/ui.js`** (panels, HUD, styles, the control facade). **Layer logic lives in `src/data/<layer>.js`.** Keep them separate.
 - **Secrets stay server-side.** Private provider keys go through source-specific Vite endpoints in `vite.config.js`. The browser deliberately sees the Google Maps browser key and Cesium ion token, so both require restrictions. Use a separate server Google key for Places/Geocoding/Street View Static.
-- `docs/CURRENT-STATE.md` is the authoritative runtime reference — read it first.
+- Start with the current README and setup guides. `docs/CURRENT-STATE.md` contains historical upstream notes, not an authoritative description of this fork's runtime.
 
 ## Coding style
 
@@ -44,7 +44,7 @@ The highest-leverage places to jump in:
 
 ## Pull requests
 
-1. Branch off `main`.
+1. Branch off the fork's default branch, `codex/fikra-monitor-release`. The retained `main` branch is upstream history, not the Fikra release.
 2. Keep `npm run build` and `npm test` green; run focused browser/tracking checks where relevant and avoid new console errors.
 3. If you change runtime behavior, update relevant documentation and tests in the same PR. Do not treat upstream's historical `docs/CURRENT-STATE.md` as proof of the fork's current behavior.
 4. If you add or change a data source, update [DATA_SOURCES.md](DATA_SOURCES.md) with its license and attribution. **Don't add data you don't have the right to redistribute** — fetch it at runtime instead.

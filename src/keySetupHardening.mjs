@@ -26,7 +26,7 @@ const WINDOWS_ACL_VERIFY_SCRIPT = [
   '  $seen[$ruleSid] = $true',
   '}',
   'if ($seen.Count -ne 3) { exit 9 }',
-].join('; ');
+].join('\n');
 
 /**
  * Resolve the native Windows ACL tools without consulting PATH.
