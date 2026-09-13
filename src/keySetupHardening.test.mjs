@@ -93,7 +93,12 @@ test('Windows hardening applies and then verifies the exact restricted DACL', ()
   const filepath = 'C:\\GEV App\\pinokio\\ENVIRONMENT.tmp';
   const result = hardenCredentialFile(filepath, {
     platform: 'win32',
-    environment: { SYSTEMROOT: WINDOWS_ROOT },
+    environment: {
+      SYSTEMROOT: WINDOWS_ROOT,
+      PSModulePath: 'C:\\Program Files\\PowerShell\\7\\Modules',
+      psmodulepath: 'D:\\untrusted\\modules',
+      PSMODULEPATH: 'E:\\other\\modules',
+    },
     fileSystem: windowsFileSystem(),
     spawn(command, args, options) {
       calls.push({ command, args, options });
@@ -120,6 +125,12 @@ test('Windows hardening applies and then verifies the exact restricted DACL', ()
   assert.equal(calls[1].args.filter((arg) => arg === '/grant:r').length, 1);
   assert.equal(calls[2].options.env.GEV_ACL_FILE, filepath);
   assert.equal(calls[2].options.env.GEV_ACL_USER_SID, USER_SID);
+  assert.deepEqual(
+    Object.keys(calls[2].options.env).filter((name) => name.toLowerCase() === 'psmodulepath'),
+    ['PSModulePath'],
+  );
+  assert.equal(calls[2].options.env.PSModulePath,
+    `${WINDOWS_ROOT}\\System32\\WindowsPowerShell\\v1.0\\Modules`);
   assert.match(calls[2].args.at(-1), /AreAccessRulesProtected/);
   assert.match(calls[2].args.at(-1), /rules\.Count -ne 3/);
   assert.match(calls[2].args.at(-1), /seen\.ContainsKey/);
@@ -178,12 +189,14 @@ test('Windows hardening rejects redirected or ambiguous system roots before spaw
 test('Windows hardening accepts a canonical Windows root on a non-default drive', () => {
   const root = 'D:\\Windows';
   const commands = [];
+  let verifierEnvironment;
   const result = hardenCredentialFile('D:\\GEV\\ENVIRONMENT.tmp', {
     platform: 'win32',
     environment: { SYSTEMROOT: root },
     fileSystem: windowsFileSystem({ root }),
-    spawn(command) {
+    spawn(command, args, options) {
       commands.push(command);
+      if (command.endsWith('\\powershell.exe')) verifierEnvironment = options.env;
       if (command.endsWith('\\whoami.exe')) {
         return { status: 0, signal: null, stdout: `"WORKSTATION\\alice","${USER_SID}"` };
       }
@@ -192,17 +205,21 @@ test('Windows hardening accepts a canonical Windows root on a non-default drive'
   });
   assert.equal(result, true);
   assert.equal(commands.every((command) => command.startsWith('D:\\Windows\\System32\\')), true);
+  assert.equal(verifierEnvironment.PSModulePath,
+    'D:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules');
 });
 
 test('32-bit Windows hardening uses the native Sysnative bridge', () => {
   const commands = [];
+  let verifierEnvironment;
   const result = hardenCredentialFile('C:\\GEV\\ENVIRONMENT.tmp', {
     platform: 'win32',
     architecture: 'ia32',
     environment: { SYSTEMROOT: WINDOWS_ROOT },
     fileSystem: windowsFileSystem({ systemDirectory: 'Sysnative' }),
-    spawn(command) {
+    spawn(command, args, options) {
       commands.push(command);
+      if (command.endsWith('\\powershell.exe')) verifierEnvironment = options.env;
       if (command.endsWith('\\whoami.exe')) {
         return { status: 0, signal: null, stdout: `"WORKSTATION\\alice","${USER_SID}"` };
       }
@@ -211,6 +228,8 @@ test('32-bit Windows hardening uses the native Sysnative bridge', () => {
   });
   assert.equal(result, true);
   assert.equal(commands.every((command) => command.includes('\\Sysnative\\')), true);
+  assert.equal(verifierEnvironment.PSModulePath,
+    'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules');
 });
 
 test('Windows hardening rejects missing, redirected, or non-file native tools', () => {

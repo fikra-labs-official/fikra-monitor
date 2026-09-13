@@ -143,13 +143,24 @@ export function hardenCredentialFile(filepath, {
     // accept only three explicit FullControl allow principals, with inheritance
     // disabled. Any unexpected rule, right, command error, or missing principal
     // fails closed before the secret reaches disk.
+    // A pwsh 7 parent can pass an incompatible PSModulePath to Windows
+    // PowerShell 5. Resolve only its native modules, and remove case aliases
+    // because Windows environment names are case-insensitive.
+    const verifierEnvironment = Object.fromEntries(
+      Object.entries(environment).filter(([name]) => name.toLowerCase() !== 'psmodulepath'),
+    );
+    const nativeModules = path.win32.join(
+      path.win32.dirname(tools.powershell).replace(/\\Sysnative\\/i, '\\System32\\'),
+      'Modules',
+    );
     const verified = spawn(tools.powershell, [
       '-NoProfile',
       '-NonInteractive',
       '-Command', WINDOWS_ACL_VERIFY_SCRIPT,
     ], {
       env: {
-        ...environment,
+        ...verifierEnvironment,
+        PSModulePath: nativeModules,
         GEV_ACL_FILE: filepath,
         GEV_ACL_USER_SID: sid,
       },
