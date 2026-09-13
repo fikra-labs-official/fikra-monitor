@@ -17,12 +17,13 @@ function safeHttpUrl(value) {
 export function normalizeRegionalPlace(payload) {
   const address = payload?.address || {};
   const locality = cleanText(
-    address.city || address.town || address.village || address.municipality
+    address['city:ru'] || address['town:ru'] || address['village:ru'] || address['municipality:ru']
+      || address.city || address.town || address.village || address.municipality
       || address.hamlet || address.county,
     90,
   );
-  const region = cleanText(address.state || address.region || address.county, 90);
-  const country = cleanText(address.country, 90);
+  const region = cleanText(address['state:ru'] || address['region:ru'] || address.state || address.region || address.county, 90);
+  const country = cleanText(address['country:ru'] || address.country, 90);
   const label = [locality, region].filter((value, index, values) => value && values.indexOf(value) === index)
     .join(', ') || country || cleanText(payload?.display_name, 120);
   if (!label) return null;
@@ -93,18 +94,18 @@ export function normalizeRegionalWeather(payload) {
 /** Translate the WMO weather code used by Open-Meteo into concise cockpit copy. */
 export function weatherCodeLabel(code) {
   const value = Number(code);
-  if (!Number.isFinite(value)) return 'CONDITIONS UNKNOWN';
-  if (value === 0) return 'CLEAR';
-  if ([1, 2].includes(value)) return 'PARTLY CLOUDY';
-  if (value === 3) return 'OVERCAST';
-  if ([45, 48].includes(value)) return 'FOG';
-  if (value >= 51 && value <= 57) return 'DRIZZLE';
-  if (value >= 61 && value <= 67) return 'RAIN';
-  if (value >= 71 && value <= 77) return 'SNOW';
-  if (value >= 80 && value <= 82) return 'RAIN SHOWERS';
-  if (value >= 85 && value <= 86) return 'SNOW SHOWERS';
-  if (value >= 95) return 'THUNDERSTORM';
-  return 'MIXED CONDITIONS';
+  if (!Number.isFinite(value)) return 'УСЛОВИЯ НЕИЗВЕСТНЫ';
+  if (value === 0) return 'ЯСНО';
+  if ([1, 2].includes(value)) return 'ПЕРЕМЕННАЯ ОБЛАЧНОСТЬ';
+  if (value === 3) return 'ПАСМУРНО';
+  if ([45, 48].includes(value)) return 'ТУМАН';
+  if (value >= 51 && value <= 57) return 'МОРОСЬ';
+  if (value >= 61 && value <= 67) return 'ДОЖДЬ';
+  if (value >= 71 && value <= 77) return 'СНЕГ';
+  if (value >= 80 && value <= 82) return 'ЛИВЕНЬ';
+  if (value >= 85 && value <= 86) return 'СНЕЖНЫЙ ЗАРЯД';
+  if (value >= 95) return 'ГРОЗА';
+  return 'СМЕШАННЫЕ ОСАДКИ';
 }
 
 /** Great-circle distance used to avoid refetching a regional brief every animation frame. */
@@ -123,9 +124,9 @@ export function regionalDistanceM(from, to) {
 
 /** Fetch a bounded regional brief through the same-origin dev/preview proxy. */
 export async function fetchRegionalBrief(latitude, longitude, { signal } = {}) {
-  if (![latitude, longitude].every(Number.isFinite)) throw new Error('Valid coordinates are required');
+  if (![latitude, longitude].every(Number.isFinite)) throw new Error('Нужны корректные координаты');
   const params = new URLSearchParams({ latitude: latitude.toFixed(5), longitude: longitude.toFixed(5) });
   const response = await fetch(`/api/regional-brief?${params}`, { signal });
-  if (!response.ok) throw new Error(`Regional brief unavailable (${response.status})`);
+  if (!response.ok) throw new Error(`Региональная сводка недоступна (${response.status})`);
   return response.json();
 }

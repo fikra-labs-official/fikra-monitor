@@ -6,13 +6,14 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
+const main = fs.readFileSync(path.join(ROOT, 'src', 'main.js'), 'utf8');
 const ui = fs.readFileSync(path.join(ROOT, 'src', 'ui.js'), 'utf8');
 
 /*
  * Required-attribution keep-out pin.
  *
- * Google Maps Platform and Cesium both require the credit line to stay visible
- * whenever their content is on screen, so this pin FAILS CLOSED: any cascade
+ * Google Maps Platform requires the credit line for Google tiles. Cesium ion
+ * requires its logo whenever ion content is on screen. This pin FAILS CLOSED: any cascade
  * construct it cannot resolve exactly is an explicit failure naming the
  * construct, never a silent skip. An earlier version modelled `bottom` only and
  * ignored specificity, importance, shorthands and media nesting — four
@@ -591,4 +592,12 @@ test('the credit line is never suppressed to make room', () => {
     assert.doesNotMatch(block, /opacity\s*:\s*0(\D|$)/, 'the credit must never be faded out');
   }
   assert.match(css, /body\.ui-clean-view #cesium-credits,\s*\n\s*body\.recording-mode #cesium-credits \{[^}]*bottom: 36px;/);
+});
+
+test('the Cesium ion brand is removed only when no ion token is configured', () => {
+  assert.match(
+    main,
+    /if \(cesiumToken\) \{[\s\S]*?Cesium\.Ion\.defaultAccessToken = cesiumToken;[\s\S]*?\} else \{[\s\S]*?Cesium\.CreditDisplay\.cesiumCredit = new Cesium\.Credit\('', true\);[\s\S]*?\}/,
+  );
+  assert.doesNotMatch(css, /\.cesium-credit-logoContainer[^{}]*\{[^}]*display\s*:\s*none/);
 });

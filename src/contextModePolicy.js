@@ -1,3 +1,5 @@
+import { t } from './i18n/index.js';
+
 const CONTEXT_DEPENDENCIES = Object.freeze({
   flights: new Set(['military-awareness', 'flights', 'military', 'ais-live-vessels', 'military-installations']),
   'space-missions': new Set(['rocket-launches', 'satellites']),
@@ -65,7 +67,7 @@ export function mergeContextTransitionErrors(primaryError, secondaryError) {
 export async function settleUserFacingContextAction({ operation, onFailure, falseIsFailure = true }) {
   try {
     const result = await operation();
-    if (falseIsFailure && result === false) throw new Error('Context transition did not complete');
+    if (falseIsFailure && result === false) throw new Error(t('context.transitionFailed'));
     return result;
   } catch (error) {
     try {

@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { t } from '../i18n/index.js';
 import {
   clearOverlaySource,
   setOverlayEntries,
@@ -130,7 +131,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
 
   const layer = {
   id: 'earthquakes',
-  name: 'Earthquakes (24h)',
+  name: t('data.layer.earthquakes'),
   icon: '🌋',
   source: 'USGS',
   updateInterval: 60000,
@@ -166,14 +167,14 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     try {
       const response = await fetch(API_URL);
       if (!response.ok) {
-        _lastError = `USGS HTTP ${response.status}`;
+        _lastError = `USGS недоступен, HTTP ${response.status}`;
         console.warn(`[Data:Earthquakes] API returned ${response.status}`);
         return false;
       }
 
       const geojson = await response.json();
       if (!geojson || !Array.isArray(geojson.features)) {
-        _lastError = 'Malformed USGS response';
+        _lastError = 'Некорректный ответ USGS';
         return false;
       }
 
@@ -251,7 +252,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
 
     } catch (e) {
       console.warn('[Data:Earthquakes] Fetch error:', e);
-      _lastError = 'USGS network error';
+      _lastError = 'сетевая ошибка USGS';
       return false;
     }
   },

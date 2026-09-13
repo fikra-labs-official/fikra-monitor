@@ -7,6 +7,8 @@
  * CommonJS package, which Vite resolves but plain Node cannot import by named export.
  */
 
+import { formatNumberRu, t } from './i18n/index.js';
+
 /**
  * Maximum distance to a curated POI that still reads as "NEAR" it.
  *
@@ -31,7 +33,10 @@ export const NEAR_POI_MAX_KM = 150;
  * @returns {string}
  */
 function coordinateTag(value, positive, negative) {
-  return `${Math.abs(value).toFixed(2)}${value >= 0 ? positive : negative}`;
+  return `${formatNumberRu(Math.abs(value), {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}${value >= 0 ? positive : negative}`;
 }
 
 /**
@@ -48,7 +53,7 @@ function coordinateTag(value, positive, negative) {
 export function composeLocalityTag(nearest, latDeg, lonDeg) {
   const distKm = Number(nearest?.distKm);
   if (nearest && Number.isFinite(distKm) && distKm <= NEAR_POI_MAX_KM) {
-    return `NEAR ${String(nearest.poi).toUpperCase()} (${String(nearest.city).toUpperCase()}) ${Math.round(distKm)}KM`;
+    return `${t('hud.near')} ${String(nearest.poi).toUpperCase()} (${String(nearest.city).toUpperCase()}) ${formatNumberRu(Math.round(distKm))} КМ`;
   }
-  return `SECTOR ${coordinateTag(latDeg, 'N', 'S')} ${coordinateTag(lonDeg, 'E', 'W')}`;
+  return `${t('hud.sector')} ${coordinateTag(latDeg, 'С', 'Ю')} ${coordinateTag(lonDeg, 'В', 'З')}`;
 }

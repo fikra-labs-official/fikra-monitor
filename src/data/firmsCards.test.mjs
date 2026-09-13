@@ -40,9 +40,9 @@ function fire(overrides = {}) {
 
 test('buildFireCard: title carries FRP, detail carries conf/age/satellite', () => {
   const card = buildFireCard({ fire: fire(), position: { x: 1, y: 2, z: 3 } }, NOW);
-  assert.equal(card.title, '▲ 1520 MW');
+  assert.equal(card.title, '▲ 1520 МВт');
   assert.equal(card.details.length, 1);
-  assert.equal(card.details[0], 'high · 2h · N20');
+  assert.equal(card.details[0], 'high · 2 ч · N20');
   assert.equal(card.selected, false);
   assert.equal(card.accent, accentForSeverity('red'), 'FRP 1520 is red-hot');
   assert.deepEqual(card.position, { x: 1, y: 2, z: 3 }, 'uses the candidate position untouched');
@@ -56,21 +56,21 @@ test('buildFireCard: missing acquisition time omits the age segment', () => {
 test('buildFireCard: SNPP satellite code renders as SNPP, weak fire is not red', () => {
   const card = buildFireCard({ fire: fire({ satellite: 'N', frp: 0.8, confidence: 0.3 }), position: {} }, NOW);
   assert.match(card.details[0], /SNPP$/);
-  assert.equal(card.title, '▲ 0.8 MW');
+  assert.equal(card.title, '▲ 0.8 МВт');
   assert.notEqual(card.accent, accentForSeverity('red'));
 });
 
 test('buildSelectedFireCard: full detail card with coords, selected flag, no fade', () => {
   const card = buildSelectedFireCard(fire(), NOW);
-  assert.equal(card.title, 'FIRE · 1520 MW');
+  assert.equal(card.title, 'ПОЖАР · 1520 МВт');
   assert.equal(card.selected, true);
-  assert.equal(card.details[0], 'high conf · 2h ago · VIIRS N20');
+  assert.equal(card.details[0], 'high conf · 2 ч ago · VIIRS N20');
   assert.equal(card.details[1], '61.914°N 122.944°W');
 });
 
 test('buildSelectedFireCard: night detections are tagged', () => {
   const card = buildSelectedFireCard(fire({ night: true }), NOW);
-  assert.match(card.details[1], / · NIGHT$/);
+  assert.match(card.details[1], / · НОЧЬ$/);
 });
 
 test('buildCellCard: plural noun, max FRP and newest age, accent passthrough', () => {
@@ -80,8 +80,8 @@ test('buildCellCard: plural noun, max FRP and newest age, accent passthrough', (
     accent: accentForSeverity('orange'),
   };
   const card = buildCellCard(candidate, NOW);
-  assert.equal(card.title, '14 FIRES');
-  assert.equal(card.details[0], 'max 210 MW · new 3h');
+  assert.equal(card.title, '14 ПОЖАРОВ');
+  assert.equal(card.details[0], 'макс. 210 МВт · обнаружен 3 ч назад');
   assert.equal(card.accent, accentForSeverity('orange'));
 });
 
@@ -108,8 +108,8 @@ test('fire anchor: cold floor renders at 0, then re-grounds when the floor warms
 test('buildCellCard: singular noun and missing-age omission', () => {
   const candidate = { cell: { count: 1, maxFrp: 9.9, newestAcqMs: 0 }, position: {}, accent: undefined };
   const card = buildCellCard(candidate, NOW);
-  assert.equal(card.title, '1 FIRE');
-  assert.equal(card.details[0], 'max 9.9 MW');
+  assert.equal(card.title, '1 ПОЖАР');
+  assert.equal(card.details[0], 'макс. 9.9 МВт');
   assert.equal(card.accent, accentForSeverity('yellow'), 'missing accent defaults to yellow');
 });
 

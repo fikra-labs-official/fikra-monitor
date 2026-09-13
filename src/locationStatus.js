@@ -10,7 +10,12 @@
  * readout reporting "Location: --" while the camera sat over the destination.
  */
 
-const EMPTY = Object.freeze({ city: '📍 Location: --', poi: 'Landmark: --' });
+import { t } from './i18n/index.js';
+
+const EMPTY = Object.freeze({
+  city: t('location.empty'),
+  poi: t('location.landmarkEmpty'),
+});
 
 /** Split a geocoder `formatted_address` into its trimmed, non-empty segments. */
 export function addressSegments(label) {
@@ -29,9 +34,9 @@ export function addressSegments(label) {
  * a free-text search leaves behind.
  *
  * @param {Object} [input]
- * @param {{name: string, pois?: Array<{name: string}>}|null} [input.city]
+ * @param {{name: string, label?: string, pois?: Array<{name: string,label?: string}>}|null} [input.city]
  *   Active preset city record, or null.
- * @param {{name: string}|null} [input.currentPoi] - Currently framed preset POI.
+ * @param {{name: string,label?: string}|null} [input.currentPoi] - Currently framed preset POI.
  * @param {string} [input.searchedLabel] - Geocoded `formatted_address`.
  * @returns {{city: string, poi: string}} Line one and line two.
  */
@@ -43,8 +48,8 @@ export function locationMiniStatus({
   if (city?.name) {
     const fallbackPoi = city.pois?.[0] || null;
     return {
-      city: `📍 ${city.name}`,
-      poi: currentPoi?.name || fallbackPoi?.name || '--',
+      city: `📍 ${city.label || city.name}`,
+      poi: currentPoi?.label || currentPoi?.name || fallbackPoi?.label || fallbackPoi?.name || '--',
     };
   }
 
@@ -55,7 +60,7 @@ export function locationMiniStatus({
       // The remaining address is the place's context ("Japan", "Minato City,
       // Tokyo, Japan"); the readout is ellipsised in CSS, so a long tail is
       // safe. A one-segment geocode ("Japan") has no context to show.
-      poi: segments.length > 1 ? segments.slice(1).join(', ') : 'Searched location',
+      poi: segments.length > 1 ? segments.slice(1).join(', ') : t('location.searched'),
     };
   }
 

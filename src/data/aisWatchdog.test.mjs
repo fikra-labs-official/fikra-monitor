@@ -94,7 +94,7 @@ test('keyless install reports the feature as off and never opens a socket', () =
   assert.deepEqual(h.types(), []);
   const snap = h.snapshot();
   assert.equal(snap.status, 'missing-key');
-  assert.equal(snap.error, 'AISSTREAM_API_KEY is not set');
+  assert.equal(snap.error, 'AISSTREAM_API_KEY не задан');
   assert.equal(snap.reconnectAttempt, 0);
   assert.equal(snap.nextAttemptAt, null);
 });
@@ -224,7 +224,7 @@ test('a silent socket is terminated once, then reconnected after backoff', () =>
   const afterKill = h.snapshot();
   assert.equal(afterKill.status, 'reconnecting');
   assert.equal(afterKill.reconnectAttempt, 1);
-  assert.match(afterKill.error, /delivered no data for \d+s/);
+  assert.match(afterKill.error, /не передает данные \d+ с/);
 
   h.advance(4_000);
   h.tick();
@@ -437,11 +437,11 @@ test('a transport error terminates immediately and walks the ladder', () => {
 
 test('an auth failure is terminal — no ladder, only a very slow probe', () => {
   const h = goLive(harness());
-  h.fail(1, { kind: 'auth', message: 'AISStream rejected the API key (HTTP 401)' });
+  h.fail(1, { kind: 'auth', message: 'AISStream отклонил ключ API (HTTP 401)' });
 
   const snap = h.snapshot();
   assert.equal(snap.status, 'auth-failed');
-  assert.equal(snap.error, 'AISStream rejected the API key (HTTP 401)');
+  assert.equal(snap.error, 'AISStream отклонил ключ API (HTTP 401)');
   assert.equal(
     snap.nextAttemptAt - h.time.wall, AIS_WATCHDOG_DEFAULTS.authProbeMs,
     'an auth rejection waits an hour, not five seconds',
@@ -585,7 +585,7 @@ test('a probe CLOSE keeps auth-failed at the hourly cadence', () => {
 
 test('a probe TRANSPORT ERROR keeps auth-failed at the hourly cadence', () => {
   const h = goLive(harness());
-  h.fail(1, { kind: 'auth', message: 'AISStream rejected the API key (HTTP 401)' });
+  h.fail(1, { kind: 'auth', message: 'AISStream отклонил ключ API (HTTP 401)' });
   h.advance(AIS_WATCHDOG_DEFAULTS.authProbeMs);
   h.tick();
 
@@ -594,7 +594,7 @@ test('a probe TRANSPORT ERROR keeps auth-failed at the hourly cadence', () => {
   const snap = h.snapshot();
   assert.equal(snap.status, 'auth-failed');
   assert.equal(snap.nextAttemptAt - h.time.wall, AIS_WATCHDOG_DEFAULTS.authProbeMs);
-  assert.match(snap.error, /rejected the API key/,
+  assert.match(snap.error, /отклонил ключ API/,
     'the chip keeps pointing at the key, not at the network');
 });
 
@@ -631,7 +631,7 @@ test('a probe outcome AFTER the stale window still keeps the hourly cadence', ()
   // auth coercion in scheduleRetry would no longer match.
   for (const outcome of ['close', 'transport', 'rate-limit']) {
     const h = goLive(harness());
-    h.fail(1, { kind: 'auth', message: 'AISStream rejected the API key (HTTP 401)' });
+    h.fail(1, { kind: 'auth', message: 'AISStream отклонил ключ API (HTTP 401)' });
     h.advance(AIS_WATCHDOG_DEFAULTS.authProbeMs);
     h.tick();
     const probe = h.watchdog.debugState().owned;

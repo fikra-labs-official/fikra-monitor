@@ -125,7 +125,7 @@ export function createAnalystEngine(providers) {
       if (unknown.length) {
         return {
           ok: false,
-          error: `I can't query ${unknown.join(', ')} yet — supported layers: ${Object.keys(ANALYST_LAYERS).join(', ')}.`,
+          error: `Пока нельзя запросить ${unknown.join(', ')}. Поддерживаемые слои: ${Object.keys(ANALYST_LAYERS).join(', ')}.`,
           coverage: { layersQueried: [], scope: 'unsupported-layer' },
         };
       }
@@ -143,20 +143,20 @@ export function createAnalystEngine(providers) {
     // Human phrasing for the same scope, so every spoken count can name what it
     // measured ("8 in view", "about 30 within 250 km of Austin") instead of
     // arriving as a bare number that contradicts the panel.
-    let scopeLabel = 'anywhere in the loaded data';
+    let scopeLabel = 'во всех загруженных данных';
     const scope = spec.scope || { kind: 'view' };
     if (scope.kind === 'region' && scope.name) {
       const region = await providers.resolveRegionRing(scope.name);
       if (!region?.ring) {
         return {
           ok: false,
-          error: `I couldn't resolve a boundary for "${scope.name}" — try a state, country, or a named natural region.`,
+          error: `Не удалось определить границы «${scope.name}». Укажите регион, страну или известный природный объект.`,
           coverage: { layersQueried, scope: `region:${scope.name}:unresolved` },
         };
       }
       resolvedScope = region;
       scopeNote = `region:${region.name}`;
-      scopeLabel = `over ${region.name}`;
+      scopeLabel = `над регионом ${region.name}`;
     } else if (scope.kind === 'radius') {
       // An explicit center always wins. Otherwise, when Contacts is active its
       // SUBJECT is the centre the operator is actually reasoning about: the
@@ -184,16 +184,16 @@ export function createAnalystEngine(providers) {
         ? `radius:${resolvedScope.km}km@${resolvedScope.centeredOn}`
         : `radius:${resolvedScope.km}km`;
       scopeLabel = resolvedScope.centeredOn
-        ? `within ${resolvedScope.km} km of ${resolvedScope.centeredOn}`
-        : `within ${resolvedScope.km} km`;
+        ? `в радиусе ${resolvedScope.km} км от ${resolvedScope.centeredOn}`
+        : `в радиусе ${resolvedScope.km} км`;
     } else if (scope.kind === 'view') {
       const view = providers.getViewContext();
       resolvedScope = { center: { lat: view.lat, lon: view.lon }, km: view.viewRadiusKm };
       scopeNote = `view:${Math.round(view.viewRadiusKm)}km`;
-      scopeLabel = 'in view';
+      scopeLabel = 'в поле зрения';
     } else {
       scopeNote = 'anywhere';
-      scopeLabel = 'anywhere in the loaded data';
+      scopeLabel = 'во всех загруженных данных';
     }
     let items = applyScope(records, scope, resolvedScope);
 
@@ -229,7 +229,7 @@ export function createAnalystEngine(providers) {
         layersQueried,
         scope: scopeNote,
         followUp: Boolean(spec.followUp && lastResult),
-        note: 'client-side data only — answers cover what the enabled layers currently hold',
+        note: 'только локально загруженные данные, ответ охватывает текущее содержимое включенных слоев',
       },
       // Surfaced so the narration can name the centre it measured from rather
       // than implying a view-centred answer.

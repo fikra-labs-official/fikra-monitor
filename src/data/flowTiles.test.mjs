@@ -160,3 +160,22 @@ test('fetchFlowForBounds: non-OK tile responses reject when nothing succeeds', a
     restore();
   }
 });
+
+test('fetchFlowForBounds: strict live geometry rejects partial tile coverage', async () => {
+  resetFlowTileCache();
+  const twoTileBounds = { south: 30.24, north: 30.29, west: -97.77, east: -97.72 };
+  assert.equal(tilesForBounds(twoTileBounds).length, 2);
+  const restore = stubFetch(async (url) => String(url).includes('/935/')
+    ? new Response(loadFixture(), { status: 200 })
+    : new Response(null, { status: 429 }));
+  try {
+    const partial = await fetchFlowForBounds(twoTileBounds);
+    assert.ok(partial.length > 50, 'the default partial-data path remains available');
+    await assert.rejects(
+      fetchFlowForBounds(twoTileBounds, { requireComplete: true }),
+      /HTTP 429/,
+    );
+  } finally {
+    restore();
+  }
+});

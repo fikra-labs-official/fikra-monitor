@@ -1,3 +1,5 @@
+import { t } from './i18n/index.js';
+
 /**
  * Camera-ownership policy for explicit and deferred navigation.
  *
@@ -84,7 +86,7 @@ export function runExplicitNavigation({
 } = {}) {
   if (disposed) return false;
   if (cockpitActive) {
-    showToast?.(`Exit cockpit to fly to a ${noun}`);
+    showToast?.(t('navigation.exitCockpitForTarget'));
     return false;
   }
   const generation = stamp?.();
@@ -106,7 +108,7 @@ export function beginDeferredNavigation({
 } = {}) {
   if (disposed) return false;
   if (cockpitActive) {
-    showToast?.(`Exit cockpit to fly to a ${noun}`);
+    showToast?.(t('navigation.exitCockpitForLocation'));
     return false;
   }
   return stamp?.();
@@ -127,7 +129,7 @@ export function reassertNavigationHandoff({
 } = {}) {
   if (disposed || generation !== currentGeneration) return false;
   if (cockpitActive) {
-    showToast?.('Exit cockpit to fly to a location');
+    showToast?.(t('navigation.exitCockpitForLocation'));
     return false;
   }
   release?.();

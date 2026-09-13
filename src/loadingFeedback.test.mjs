@@ -80,7 +80,7 @@ test('universal notice masks active loading only for its own fixed dwell', () =>
   const notice = createGlobalStatusNotice('Shared satellite is unavailable', 300);
 
   assert.equal(presentGlobalLoadingStatus(notice, loading, summary, 301).label, 'Shared satellite is unavailable');
-  assert.equal(presentGlobalLoadingStatus(notice, loading, summary, notice.hideAt).label, 'LOADING LIVE DATA');
+  assert.equal(presentGlobalLoadingStatus(notice, loading, summary, notice.hideAt).label, 'ЗАГРУЗКА ОНЛАЙН-ДАННЫХ');
 });
 
 test('terminal failure preempts a finite notice, whose full dwell starts afterward', () => {
@@ -94,7 +94,7 @@ test('terminal failure preempts a finite notice, whose full dwell starts afterwa
 
   assert.equal(
     presentGlobalLoadingStatus(notice, loading, aggregateLayerLoading([]), 401).label,
-    'LOAD FAILED',
+    'ОШИБКА ЗАГРУЗКИ',
   );
   assert.equal(notice.hideAt, null, 'masked finite notice has not started its dwell');
   loading = reduceLoadingFeedback(loading, aggregateLayerLoading([]), 5300);
@@ -128,12 +128,12 @@ test('persistent acquisition never hides an unrelated manager failure', () => {
 
   assert.deepEqual(presentGlobalLoadingStatus(acquiring, loading, idle, 301), {
     state: 'error',
-    label: 'LOAD FAILED',
+    label: 'ОШИБКА ЗАГРУЗКИ',
     detail: '',
   });
   assert.equal(
     presentGlobalLoadingStatus(acquiring, loading, idle, 300 + LOADING_FAILURE_DWELL_MS - 1).label,
-    'LOAD FAILED',
+    'ОШИБКА ЗАГРУЗКИ',
   );
   loading = reduceLoadingFeedback(loading, idle, 300 + LOADING_FAILURE_DWELL_MS);
   assert.equal(
@@ -193,9 +193,9 @@ test('reveals sustained loading and then a bounded completion state', () => {
   const summary = aggregateLayerLoading([{ id: 'a', name: 'A', lifecycleState: 'enabling' }]);
   const pending = reduceLoadingFeedback(createLoadingFeedbackState(), summary, 100);
   const visible = reduceLoadingFeedback(pending, summary, 300);
-  assert.equal(presentLoadingFeedback(visible, summary, 300).label, 'LOADING LIVE DATA');
+  assert.equal(presentLoadingFeedback(visible, summary, 300).label, 'ЗАГРУЗКА ОНЛАЙН-ДАННЫХ');
   const complete = reduceLoadingFeedback(visible, aggregateLayerLoading([]), 350);
-  assert.equal(presentLoadingFeedback(complete, aggregateLayerLoading([]), 350).label, 'LOAD COMPLETE');
+  assert.equal(presentLoadingFeedback(complete, aggregateLayerLoading([]), 350).label, 'ЗАГРУЗКА ЗАВЕРШЕНА');
 });
 
 test('terminal loading feedback centers its label without an empty detail slot', () => {
@@ -241,11 +241,11 @@ test('surfaces manager-owned refresh failure and recovery through the shared ban
     type: 'refresh-transition', layerId: 'satellites', refreshEpoch: 1,
   });
   state = reduceLoadingFeedback(state, refreshing, 200);
-  assert.equal(presentLoadingFeedback(state, refreshing, 200).label, 'REFRESHING LIVE DATA');
+  assert.equal(presentLoadingFeedback(state, refreshing, 200).label, 'ОБНОВЛЕНИЕ ОНЛАЙН-ДАННЫХ');
   state = reduceLoadingFeedback(state, aggregateLayerLoading([]), 250, {
     type: 'refresh-failed', layerId: 'satellites', error: new Error('offline'), refreshEpoch: 1,
   });
-  assert.equal(presentLoadingFeedback(state, aggregateLayerLoading([]), 250).label, 'LOAD FAILED');
+  assert.equal(presentLoadingFeedback(state, aggregateLayerLoading([]), 250).label, 'ОШИБКА ЗАГРУЗКИ');
 
   const recovered = reduceLoadingFeedback(state, refreshing, 6000, {
     type: 'refresh-transition', layerId: 'satellites', refreshEpoch: 2,
@@ -283,7 +283,7 @@ test('AIS first-connect grace expiry reports failure even without a terminal man
   state = reduceLoadingFeedback(state, unavailable, 300);
 
   assert.equal(state.terminal, 'error');
-  assert.equal(presentLoadingFeedback(state, unavailable, 300).label, 'LOAD FAILED');
+  assert.equal(presentLoadingFeedback(state, unavailable, 300).label, 'ОШИБКА ЗАГРУЗКИ');
 });
 
 test('participant stats failure outranks a simultaneous visibility completion', () => {
@@ -305,6 +305,31 @@ test('participant stats failure outranks a simultaneous visibility completion', 
   }]);
   state = reduceLoadingFeedback(state, missingKey, 250, {
     type: 'visibility', layerId: 'ais-live-vessels', enabled: true,
+  });
+
+  assert.equal(state.terminal, 'error');
+  assert.equal(presentLoadingFeedback(state, missingKey, 250).label, 'ОШИБКА ЗАГРУЗКИ');
+});
+
+test('an explicit lifecycle failure still outranks a key-required row', () => {
+  const enabling = aggregateLayerLoading([{
+    id: 'local-firms',
+    name: 'FIRMS Active Fires',
+    lifecycleState: 'enabling',
+    stats: { loading: true },
+  }]);
+  let state = reduceLoadingFeedback(createLoadingFeedbackState(), enabling, 0);
+  state = reduceLoadingFeedback(state, enabling, 200);
+
+  const missingKey = aggregateLayerLoading([{
+    id: 'local-firms',
+    name: 'FIRMS Active Fires',
+    enabled: true,
+    lifecycleState: 'enabled',
+    stats: { loading: false, keyRequired: true, error: 'KEY REQUIRED' },
+  }]);
+  state = reduceLoadingFeedback(state, missingKey, 250, {
+    type: 'visibility-failed', layerId: 'local-firms', error: new Error('lifecycle failed'),
   });
 
   assert.equal(state.terminal, 'error');
@@ -334,7 +359,7 @@ test('retains the worst terminal outcome until every concurrent load drains', ()
     type: 'visibility', layerId: 'b', enabled: true,
   });
   assert.equal(state.terminal, 'error');
-  assert.equal(presentLoadingFeedback(state, aggregateLayerLoading([]), 350).label, 'LOAD FAILED');
+  assert.equal(presentLoadingFeedback(state, aggregateLayerLoading([]), 350).label, 'ОШИБКА ЗАГРУЗКИ');
 });
 
 test('retains cancellation across overlapping success and resets it for a later epoch', () => {
@@ -399,9 +424,9 @@ test('describes disable work without reporting it as a completed load', () => {
   }]);
   const pending = reduceLoadingFeedback(createLoadingFeedbackState(), summary, 0);
   const visible = reduceLoadingFeedback(pending, summary, 200);
-  assert.equal(presentLoadingFeedback(visible, summary, 200).label, 'TURNING OFF LIVE DATA');
+  assert.equal(presentLoadingFeedback(visible, summary, 200).label, 'ОТКЛЮЧЕНИЕ ОНЛАЙН-ДАННЫХ');
   const complete = reduceLoadingFeedback(visible, aggregateLayerLoading([]), 250);
-  assert.equal(presentLoadingFeedback(complete, aggregateLayerLoading([]), 250).label, 'LIVE DATA OFF');
+  assert.equal(presentLoadingFeedback(complete, aggregateLayerLoading([]), 250).label, 'ОНЛАЙН-ДАННЫЕ ОТКЛЮЧЕНЫ');
 });
 
 test('a flow failure landing after the roads settle still ends the batch as LOAD FAILED', () => {
@@ -433,7 +458,7 @@ test('a flow failure landing after the roads settle still ends the batch as LOAD
   assert.equal(state.terminal, 'error');
   assert.equal(
     presentLoadingFeedback(state, flowFailed, 900).label,
-    'LOAD FAILED',
+    'ОШИБКА ЗАГРУЗКИ',
     'a late flow failure must not be announced as LOAD COMPLETE',
   );
 });
@@ -575,7 +600,7 @@ test('aggregates Mapped Installations refresh beside CCTV without changing eithe
   const visible = reduceLoadingFeedback(pending, summary, 200);
   assert.deepEqual(
     presentLoadingFeedback(visible, summary, 200),
-    { state: 'refresh', label: 'REFRESHING LIVE DATA', detail: 'CCTV · Mapped Installations' },
+    { state: 'refresh', label: 'ОБНОВЛЕНИЕ ОНЛАЙН-ДАННЫХ', detail: 'CCTV · Mapped Installations' },
   );
 });
 

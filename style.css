@@ -1,19 +1,19 @@
 /* ═══════════════════════════════════════════════
-   GOD'S EYE VIEW — Dark Sci-Fi UI
+   FIKRA MONITOR — Fikra Labs dark operations UI
    Apple meets Blade Runner
    ═══════════════════════════════════════════════ */
 
 :root {
-  --bg-dark: #0a0a0f;
-  --glass-bg: rgba(12, 12, 20, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-border-hover: rgba(255, 255, 255, 0.15);
-  --accent: #00d4ff;
-  --accent-dim: rgba(0, 212, 255, 0.15);
-  --accent-glow: rgba(0, 212, 255, 0.4);
-  --text-primary: #e8eaed;
-  --text-secondary: rgba(232, 234, 237, 0.5);
-  --text-dim: rgba(232, 234, 237, 0.3);
+  --bg-dark: #080c0e;
+  --glass-bg: rgba(12, 19, 20, 0.72);
+  --glass-border: rgba(31, 181, 186, 0.12);
+  --glass-border-hover: rgba(31, 181, 186, 0.24);
+  --accent: #1fb5ba;
+  --accent-dim: rgba(31, 181, 186, 0.15);
+  --accent-glow: rgba(31, 181, 186, 0.38);
+  --text-primary: #f7f6f2;
+  --text-secondary: rgba(247, 246, 242, 0.56);
+  --text-dim: rgba(247, 246, 242, 0.34);
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --panel-radius: 16px;
@@ -222,9 +222,9 @@ body.cockpit-mode #cockpit-cloud-effects.active {
   display: none !important;
 }
 
-/* Data-source attribution (Google Maps / 3D Tiles, etc.).
-   Required by the Google Maps Platform Terms of Service — keep it visible.
-   Styled to be unobtrusive but legible against the dark UI. */
+/* Data-source attribution (Google Maps / 3D Tiles and active providers).
+   Google attribution must stay visible. Cesium ion adds its own logo only
+   when ion content is configured. */
 #cesium-credits {
   position: fixed;
   /* Bottom-LEFT corner, mirrored from the GEV mic pill (right:36/bottom:36) so the two bottom
@@ -299,13 +299,11 @@ body.cockpit-mode #cockpit-cloud-effects.active {
     margin: 0 !important;
   }
 }
-/* Clean-view / recording: the Google + Cesium attribution MUST stay visible.
-   Google Maps Platform ToS and Cesium's terms require the credit whenever the
-   content is displayed — and these are exactly the modes used to record demos
-   and launch videos, so hiding #cesium-credits here (as it was before) shipped
-   non-compliant footage. The full credit line — Cesium/Ion logo, "Google Maps",
-   and the "Data attribution" link that opens the per-layer license popover —
-   stays on screen; it's already styled small and unobtrusive above. The GEV
+/* Clean-view / recording: active provider attribution MUST stay visible.
+   Google Maps Platform requires its logo and data attribution whenever Google
+   content is displayed. Cesium ion adds its logo when ion content is active.
+   The provider credit line and the "Data attribution" link stay on screen.
+   The GEV
    chrome (panels/HUD) still fades via its own rules; only the required notice
    is exempt. (Note: Cesium re-applies inline styles on the credit elements each
    frame, so the on-screen credit content is owned by Cesium's update loop, not
@@ -446,22 +444,26 @@ body.cockpit-mode #cockpit-cloud-effects.active {
 #title-bar h1 {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   font-family: var(--font-mono);
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 600;
-  letter-spacing: 8px;
+  letter-spacing: 6px;
   color: var(--text-primary);
   text-shadow: 0 0 30px var(--accent-glow);
   position: relative;
 }
 
 #title-bar .title-logo {
-  position: relative;
   display: block;
-  width: 52px;
+  width: 154px;
   height: auto;
-  filter: drop-shadow(0 0 12px rgba(0, 246, 255, 0.5));
+  flex: 0 0 auto;
+  filter: drop-shadow(0 0 12px rgba(31, 181, 186, 0.35));
+}
+
+#title-bar .title-name {
+  white-space: nowrap;
 }
 
 #title-bar .title-logo::before,
@@ -840,10 +842,10 @@ body.cockpit-mode #cockpit-cloud-effects.active {
 
 .loader-logo {
   display: block;
-  width: 128px;
+  width: 180px;
   height: auto;
   margin: 0 auto 24px;
-  filter: drop-shadow(0 0 24px rgba(0, 246, 255, 0.42));
+  filter: drop-shadow(0 0 24px rgba(31, 181, 186, 0.4));
   animation: logo-pulse 2s ease-in-out infinite;
 }
 
@@ -6231,7 +6233,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 /* "Acquiring" caption only when no previous frame is showing underneath */
 .cctv-frame-wrap.loading:not(.has-frame)::before {
-  content: 'ACQUIRING FRAME';
+  content: 'ЗАГРУЗКА КАДРА';
   position: absolute;
   inset: 0;
   display: flex;
@@ -6797,7 +6799,11 @@ body.scene-playback-mode :is(#clear-selected-layers, #reset-globe-view) {
   }
 
   #title-bar .title-logo {
-    width: 36px;
+    width: 104px;
+  }
+
+  #title-bar .title-name {
+    letter-spacing: 3px;
   }
 
   #location-bar {
@@ -7680,14 +7686,41 @@ body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
 
 /* ── Command dock refinement: stacked trays + voice states ── */
 #command-dock {
-  --dock-voice-width: 8.75rem;
+  --dock-voice-width: clamp(14rem, 19vw, 15rem);
   --dock-location-pinned-height: 0px;
   --dock-presets-pinned-height: 0px;
   --dock-pinned-stack-height: 0px;
   --dock-lower-pinned-height: 0px;
   --dock-unified-width: calc(var(--dock-side-compact) * 2 + var(--dock-voice-width));
-  --dock-location-open: max(34rem, calc(var(--dock-unified-width) + 0.75rem));
+  --dock-location-open: clamp(42rem, 74vw, 60rem);
   --dock-presets-open: max(34rem, calc(var(--dock-unified-width) + 0.75rem));
+}
+
+/* Long translated city and landmark names stay reachable with a visible
+   scrollbar. A wheel listener in UI also maps vertical mouse-wheel motion
+   onto these horizontal rows. */
+#command-dock .location-pills,
+#command-dock .poi-row-container.expanded {
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(54, 220, 255, 0.48) rgba(255, 255, 255, 0.05);
+}
+
+#command-dock .location-pills::-webkit-scrollbar,
+#command-dock .poi-row-container.expanded::-webkit-scrollbar {
+  display: block;
+  height: 4px;
+}
+
+#command-dock .location-pills::-webkit-scrollbar-thumb,
+#command-dock .poi-row-container.expanded::-webkit-scrollbar-thumb {
+  background: rgba(54, 220, 255, 0.48);
+  border-radius: 999px;
+}
+
+#command-dock .location-pills::-webkit-scrollbar-track,
+#command-dock .poi-row-container.expanded::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 #command-dock .panel-title,
@@ -7893,10 +7926,13 @@ body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
   justify-content: flex-start;
   gap: 0.35rem;
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 #command-dock .gev-voice-kicker {
   position: static;
+  flex: 0 0 auto;
   padding-right: 0;
   font-size: 0.46rem;
   font-weight: 500;
@@ -7958,6 +7994,7 @@ body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
 
 #command-dock #gev-voice-status {
   position: static;
+  flex: 0 0 auto;
   width: auto;
   padding-top: 0;
   color: var(--accent);
@@ -8121,12 +8158,17 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
   #command-dock .gev-voice-error-tray {
     width: min(24rem, calc(100vw - 1.5rem));
   }
+
 }
 
 @media (max-width: 620px) {
   #command-dock {
     --dock-side-compact: 3.25rem;
-    --dock-voice-width: 8.75rem;
+    --dock-voice-width: min(11.75rem, calc(100vw - 7.5rem));
+  }
+
+  #command-dock .gev-voice-kicker {
+    display: none;
   }
 
   #command-dock .panel-title,
@@ -8138,6 +8180,12 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
 
   #left-panel-stack {
     bottom: calc(50vh + 8px);
+  }
+}
+
+@media (max-width: 360px) {
+  #command-dock .gev-voice-cost-value {
+    display: none;
   }
 }
 
@@ -9516,4 +9564,41 @@ body.scene-playback-mode #key-setup {
   color: rgba(255, 190, 170, 1);
   border-color: rgba(255, 170, 150, 0.65);
   outline: none;
+}
+
+@media (max-width: 620px) {
+  /* Fit the brand beside the globe actions without moving the map panels. */
+  #title-bar h1 {
+    gap: 6px;
+    font-size: 13px;
+    letter-spacing: 2px;
+  }
+
+  #title-bar .title-logo { width: 76px; }
+  #title-bar .title-name { letter-spacing: 2px; }
+  #title-bar .subtitle {
+    margin-top: 6px;
+    font-size: 8px;
+    letter-spacing: 2px;
+  }
+}
+
+@media (max-width: 584px) {
+  #title-bar .title-logo { width: 60px; }
+
+  #top-center-actions {
+    top: 18px;
+    right: 20px;
+    left: auto;
+    transform: none;
+  }
+
+  /* The same active style remains visible in the HUD on narrow screens. */
+  #style-indicator { display: none; }
+}
+
+@media (max-width: 360px) {
+  #title-bar .title-logo { display: none; }
+  #title-bar .title-name { letter-spacing: 1px; }
+  #title-bar .subtitle { font-size: 7px; letter-spacing: 0.8px; }
 }

@@ -20,6 +20,7 @@ import { isPickedWorldPosition } from '../data/scenePick.js';
 import { resolveRegionRingForQuery } from '../annotations/annotationResolver.js';
 import { normalizeRadioCountryInput } from '../data/radioCountry.js';
 import { TR3B_CLASS } from '../data/tr3bRegistry.js';
+import { t } from '../i18n/index.js';
 
 const ALLOWED_STYLES = new Set(['normal', 'retro', 'surveillance', 'thermal', 'anime', 'noir', 'snow']);
 const PANEL_ALIASES = new Map([
@@ -52,6 +53,18 @@ const PANEL_ALIASES = new Map([
   ['basemap', 'control-panel'],
   ['map sources', 'control-panel'],
   ['sources', 'control-panel'],
+  ['слои', 'data-panel'],
+  ['слои данных', 'data-panel'],
+  ['местоположение', 'location-bar'],
+  ['локация', 'location-bar'],
+  ['стили', 'control-panel'],
+  ['фильтры', 'control-panel'],
+  ['камеры', 'cctv-panel'],
+  ['контекст', 'global-context-panel'],
+  ['сцены', 'scene-panel'],
+  ['постобработка', 'pp-toggles'],
+  ['подложка', 'control-panel'],
+  ['картографическая подложка', 'control-panel'],
 ]);
 
 const PANEL_IDS = new Set(['data-panel', 'location-bar', 'control-panel', 'cctv-panel', 'radio-panel', 'global-context-panel', 'scene-panel', 'pp-toggles']);
@@ -67,6 +80,13 @@ const CONTEXT_MODE_ALIASES = new Map([
   ['space mission', 'space-missions'],
   ['space-missions', 'space-missions'],
   ['missions', 'space-missions'],
+  ['выкл', 'off'],
+  ['выключить', 'off'],
+  ['контакты', 'flights'],
+  ['контакт', 'flights'],
+  ['рейсы', 'flights'],
+  ['космические миссии', 'space-missions'],
+  ['космическая миссия', 'space-missions'],
 ]);
 /**
  * Every model-readable field that carries a context-mode id, and what an
@@ -138,6 +158,24 @@ const COCKPIT_ACTION_ALIASES = new Map([
   ['next closest helicopter', 'next'],
   ['next closest military', 'next'],
   ['go to next', 'next'],
+  ['войти', 'enter'],
+  ['вход', 'enter'],
+  ['выход', 'exit'],
+  ['выйти', 'exit'],
+  ['далее', 'next'],
+  ['следующий', 'next'],
+  ['следующая', 'next'],
+  ['назад', 'previous'],
+  ['предыдущий', 'previous'],
+  ['предыдущая', 'previous'],
+  ['статус', 'status'],
+  ['состояние', 'status'],
+  ['следующий военный', 'next'],
+  ['следующий вертолёт', 'next'],
+  ['следующее судно', 'next'],
+  ['следующий корабль', 'next'],
+  ['следующий объект', 'next'],
+  ['следующая база', 'next'],
 ]);
 const COCKPIT_TARGET_LAYERS = new Set(['flights', 'military', 'ais-live-vessels', 'military-installations']);
 
@@ -176,7 +214,63 @@ const LAYER_ALIASES = new Map([
   ['firms', 'local-firms'],
   ['fires', 'local-firms'],
   ['active fires', 'local-firms'],
+  ['рейсы', 'flights'],
+  ['самолёты', 'flights'],
+  ['гражданские рейсы', 'flights'],
+  ['военные', 'military'],
+  ['военные рейсы', 'military'],
+  ['военные самолёты', 'military'],
+  ['землетрясения', 'earthquakes'],
+  ['спутники', 'satellites'],
+  ['космическая миссия', 'rocket-launches'],
+  ['космические миссии', 'rocket-launches'],
+  ['запуски ракет', 'rocket-launches'],
+  ['дорожное движение', 'traffic'],
+  ['пробки', 'traffic'],
+  ['камеры', 'cctv'],
+  ['радио', 'radio'],
+  ['радиостанции', 'radio'],
+  ['велопрокат', 'bikeshare'],
+  ['велосипеды', 'bikeshare'],
+  ['судно', 'ais-live-vessels'],
+  ['суда', 'ais-live-vessels'],
+  ['корабль', 'ais-live-vessels'],
+  ['корабли', 'ais-live-vessels'],
+  ['военные объекты', 'military-installations'],
+  ['военный объект', 'military-installations'],
+  ['объект', 'military-installations'],
+  ['база', 'military-installations'],
+  ['базы', 'military-installations'],
+  ['цод', 'local-datacenters'],
+  ['центры обработки данных', 'local-datacenters'],
+  ['плотины', 'local-dams'],
+  ['подводные кабели', 'telegeography-submarine-cables'],
+  ['кабели', 'telegeography-submarine-cables'],
+  ['пожары', 'local-firms'],
+  ['активные пожары', 'local-firms'],
 ]);
+
+const VOICE_LAYER_LABELS = Object.freeze({
+  flights: 'Гражданские рейсы',
+  military: 'Военные рейсы',
+  earthquakes: 'Землетрясения',
+  satellites: 'Спутники',
+  'rocket-launches': 'Космические миссии',
+  traffic: 'Дорожное движение',
+  cctv: 'CCTV',
+  radio: 'Radio',
+  bikeshare: 'Велопрокат',
+  'ais-live-vessels': 'Суда AIS',
+  'military-installations': 'Военные объекты',
+  'local-datacenters': 'ЦОД',
+  'local-dams': 'Плотины',
+  'telegeography-submarine-cables': 'Подводные кабели',
+  'local-firms': 'Активные пожары',
+});
+
+function voiceLayerLabel(layerId, fallback = '') {
+  return VOICE_LAYER_LABELS[layerId] || String(fallback || '').trim() || 'Указанный слой';
+}
 
 const CITY_ALIASES = new Map([
   ['new york', 'nyc'],
@@ -185,6 +279,11 @@ const CITY_ALIASES = new Map([
   ['washington', 'dc'],
   ['washington dc', 'dc'],
   ['washington d.c.', 'dc'],
+  ['нью-йорк', 'nyc'],
+  ['нью йорк', 'nyc'],
+  ['сан-франциско', 'sf'],
+  ['сан франциско', 'sf'],
+  ['вашингтон', 'dc'],
 ]);
 
 // Basemap stack vocabulary. Switching requires an explicit stack name
@@ -218,6 +317,14 @@ const STACK_ALIASES = new Map([
   ['road', 'osm'],
   ['roads', 'osm'],
   ['road map', 'osm'],
+  ['аэрофото bing', 'bing-aerial'],
+  ['аэрофотоснимки bing', 'bing-aerial'],
+  ['подписи bing', 'bing-labels'],
+  ['аэрофото bing с подписями', 'bing-labels'],
+  ['дорожная карта', 'osm'],
+  ['карта дорог', 'osm'],
+  ['google 3d', 'photoreal'],
+  ['гугл 3d', 'photoreal'],
 ]);
 
 /** Search order for track_entity across entity layer families. */
@@ -321,7 +428,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
     if (name === 'set_layer_visibility') {
       const layerId = normalizeLayerId(args.layerId);
       if (!layerId) {
-        throw new Error(`Unknown data layer: ${args.layerId || 'missing'}`);
+        throw new Error(t('voice.action.unknownLayer', { layer: args.layerId || 'не указан' }));
       }
       if (!dataManager.layers.has(layerId)) {
         if (layerId === 'radio') {
@@ -329,11 +436,11 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
             ok: false,
             action: 'set_layer_visibility',
             layerId,
-            error: 'Radio layer unavailable',
+            error: t('voice.action.radioUnavailable'),
             ...readLayerLifecycleSummary(dataManager, layerId),
           };
         }
-        throw new Error(`Unknown data layer: ${args.layerId || 'missing'}`);
+        throw new Error(t('voice.action.unknownLayer', { layer: args.layerId || 'не указан' }));
       }
       const enabled = Boolean(args.enabled);
       const changeOptions = { origin: 'voice' };
@@ -381,7 +488,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           action: 'set_layer_visibility',
           layerId,
           cancelled: true,
-          error: 'Layer request was superseded by a newer voice turn',
+          error: t('voice.action.layerSuperseded'),
           ...lifecycleSummary,
         };
       }
@@ -393,7 +500,9 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           ok: false,
           action: 'set_layer_visibility',
           layerId,
-          error: changeError?.message || `Could not ${enabled ? 'enable' : 'disable'} the requested layer`,
+          error: changeError?.message || t('voice.action.layerToggleFailed', {
+            verb: t(enabled ? 'voice.action.enable' : 'voice.action.disable'),
+          }),
           ...lifecycleSummary,
         };
       }
@@ -402,7 +511,9 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           ok: false,
           action: 'set_layer_visibility',
           layerId,
-          error: `Could not ${enabled ? 'enable' : 'disable'} the requested layer`,
+          error: t('voice.action.layerToggleFailed', {
+            verb: t(enabled ? 'voice.action.enable' : 'voice.action.disable'),
+          }),
           ...lifecycleSummary,
         };
       }
@@ -412,7 +523,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
         ok: true,
         action: 'set_layer_visibility',
         layerId,
-        label: layer?.name || layerId,
+        label: voiceLayerLabel(layerId, layer?.name),
         ...lifecycleSummary,
       };
     }
@@ -423,7 +534,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
         return {
           ok: false,
           action: 'select_nearest_aircraft',
-          error: 'Nearest-aircraft selection supports Flights or Military Flights only',
+          error: 'Выбор ближайшего самолёта доступен только для гражданских или военных рейсов',
         };
       }
       const hasLocationId = Boolean(String(args.locationId || '').trim());
@@ -437,7 +548,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           ok: false,
           action: 'select_nearest_aircraft',
           stage: 'location',
-          error: 'Nearest-aircraft selection needs a preset, place name, or latitude and longitude',
+          error: 'Для выбора ближайшего самолёта нужны пресет, название места или широта и долгота',
         };
       }
       const locationArgs = {
@@ -459,7 +570,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           action: 'select_nearest_aircraft',
           stage: 'layer',
           cancelled: !current() || Boolean(layer?.cancelled),
-          error: layer?.error || `${layerId} could not be enabled`,
+          error: layer?.error || `Не удалось включить слой «${voiceLayerLabel(layerId)}»`,
           layer,
         };
       }
@@ -471,7 +582,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           action: 'select_nearest_aircraft',
           stage: 'location',
           cancelled: !current() || Boolean(location?.cancelled),
-          error: location?.error || `Could not arrive at ${location?.label || args.locationQuery || args.locationId || 'the requested place'}`,
+          error: location?.error || `Не удалось перейти к месту: ${location?.label || args.locationQuery || args.locationId || 'запрошенное место'}`,
           location,
           layer,
         };
@@ -495,8 +606,8 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           stage: 'refresh',
           cancelled: !current(),
           error: !current()
-            ? 'Nearest-aircraft refresh was cancelled'
-            : `${layer.label || layerId} is enabled, but its destination refresh did not complete`,
+            ? 'Обновление для поиска ближайшего самолёта отменено'
+            : `Слой «${voiceLayerLabel(layerId, layer.label)}» включён, но обновление в точке назначения не завершилось`,
           location,
           layer,
         };
@@ -527,10 +638,10 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           stage: 'nearest',
           cancelled: !current(),
           error: !current()
-            ? 'Nearest-aircraft selection was cancelled'
+            ? 'Выбор ближайшего самолёта отменён'
             : (feed.state === 'unavailable'
-              ? `${layer.label || layerId} is enabled, but ${feed.source || 'its aircraft feed'} is unavailable`
-              : `${layer.label || layerId} is enabled${feed.state === 'fallback' ? ` on the ${feed.source || 'fallback'} feed` : ''}, but no airborne aircraft is loaded in the ${location.label || 'destination'} view yet`),
+              ? `Слой «${voiceLayerLabel(layerId, layer.label)}» включён, но источник ${feed.source || 'данных о самолётах'} недоступен`
+              : `Слой «${voiceLayerLabel(layerId, layer.label)}» включён${feed.state === 'fallback' ? ` через резервный источник ${feed.source || ''}` : ''}, но в области «${location.label || 'точка назначения'}» пока нет загруженных самолётов в воздухе`),
           location,
           layer,
           feed,
@@ -548,7 +659,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           ok: false,
           action: 'select_nearest_aircraft',
           stage: 'selection',
-          error: selection?.error || 'The nearest airborne aircraft could not be selected',
+          error: selection?.error || 'Не удалось выбрать ближайший самолёт в воздухе',
           location,
           layer,
           feed,
@@ -574,14 +685,14 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
 
     if (name === 'set_visual_style') {
       const style = normalizeStyle(args.style);
-      if (!style) throw new Error(`Unknown visual style: ${args.style || 'missing'}`);
+      if (!style) throw new Error(`Неизвестный визуальный стиль: ${args.style || 'не указан'}`);
       styleManager.setStyle(style);
       return { ok: true, action: 'set_visual_style', style };
     }
 
     if (name === 'set_panel_open') {
       const panelId = normalizePanelId(args.panelId || args.panel);
-      if (!panelId) throw new Error(`Unknown panel: ${args.panelId || args.panel || 'missing'}`);
+      if (!panelId) throw new Error(`Неизвестная панель: ${args.panelId || args.panel || 'не указана'}`);
       const open = args.open !== false;
       setPanelOpen(styleManager, panelId, open);
       return { ok: true, action: 'set_panel_open', panelId, open };
@@ -589,14 +700,14 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
 
     if (name === 'set_context_mode') {
       if (!styleManager?.setContextMode) {
-        return { ok: false, action: 'set_context_mode', error: 'Context mode control unavailable' };
+        return { ok: false, action: 'set_context_mode', error: t('voice.action.contextUnavailable') };
       }
       const mode = normalizeContextMode(args.mode || args.contextMode);
       if (mode === null && args.mode != null && String(args.mode || '').trim() !== 'off') {
         return {
           ok: false,
           action: 'set_context_mode',
-          error: `Unknown context mode: ${args.mode || 'missing'}`,
+          error: `Неизвестный режим контекста: ${args.mode || 'не указан'}`,
         };
       }
       const cancellationState = () => withContextModeVocabulary(
@@ -609,7 +720,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           ok: false,
           action: 'set_context_mode',
           cancelled: true,
-          error: 'Context request was cancelled before it could run',
+          error: t('voice.action.contextCancelledBeforeRun'),
           ...cancellationState(),
         };
       }
@@ -626,7 +737,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           ok: false,
           action: 'set_context_mode',
           cancelled: true,
-          error: result?.error || 'Context request was cancelled before it completed',
+          error: result?.error || t('voice.action.contextCancelledBeforeComplete'),
           ...cancellationState(),
         };
       }
@@ -641,7 +752,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
 
     if (name === 'control_cockpit') {
       if (!styleManager?.controlCockpit) {
-        return { ok: false, action: 'control_cockpit', error: 'Cockpit control unavailable' };
+        return { ok: false, action: 'control_cockpit', error: t('voice.action.cockpitUnavailable') };
       }
       const rawAction = args.action || args.command;
       const action = normalizeCockpitAction(rawAction);
@@ -650,7 +761,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
         return {
           ok: false,
           action: 'control_cockpit',
-          error: `Unknown cockpit action: ${args.action || args.command || 'missing'}`,
+          error: `Неизвестная команда кабины: ${args.action || args.command || 'не указана'}`,
         };
       }
       const inferred = normalizeCockpitNavigationHints(rawAction);
@@ -667,7 +778,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
             ok: false,
             action: 'control_cockpit',
             cancelled: true,
-            error: 'Cockpit entry was cancelled before it could run',
+            error: 'Вход в кабину отменён до запуска',
             state: styleManager.getCockpitState?.() || null,
           };
         }
@@ -700,7 +811,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
               ok: false,
               action: 'control_cockpit',
               cancelled: !current() || Boolean(contextResult?.cancelled),
-              error: contextResult?.error || 'Contacts context could not be established for Cockpit entry',
+              error: contextResult?.error || 'Не удалось подготовить контекст Contacts для входа в кабину',
               context: contextResult ? withContextModeVocabulary(contextResult) : null,
               contextRollback: withContextModeVocabulary(contextRollback),
               state: styleManager.getCockpitState?.() || null,
@@ -868,7 +979,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
 
     if (name === 'set_map_stack') {
       const stackId = normalizeStackId(args.stack);
-      if (!stackId) throw new Error(`Unknown map stack: ${args.stack || 'missing'}`);
+      if (!stackId) throw new Error(`Неизвестный набор карт: ${args.stack || 'не указан'}`);
       const result = await styleManager.setMapStack(stackId);
       return { action: 'set_map_stack', requested: stackId, ...result };
     }
@@ -914,15 +1025,19 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
       return frameOverhead(viewer, dataManager, styleManager, args);
     }
 
+    if (name === 'search_places') {
+      return searchPlaces(annotations, args, runOptions, current);
+    }
+
     if (name === 'annotate_map') {
-      return annotateMap(annotations, args);
+      return annotateMap(annotations, args, runOptions, current);
     }
 
     if (name === 'clear_annotations') {
       return clearAnnotations(annotations);
     }
 
-    throw new Error(`Unknown GEV tool: ${name}`);
+    throw new Error(t('voice.action.unknownTool', { name }));
   };
 }
 
@@ -941,6 +1056,7 @@ function selectedCockpitTarget(dataManager) {
 // mirror the tool-schema caps (defense-in-depth: a direct or schema-ignoring call
 // is still bounded here).
 const MAX_ANNOTATIONS_PER_CALL = 24;
+const MAX_PLACE_SEARCH_RESULTS = 20;
 const MAX_ROUTE_POINTS = 12;
 const MAX_TARGET_LEN = 200;
 const MAX_LABEL_LEN = 120;
@@ -968,27 +1084,152 @@ function sanitizeAnnotationSpec(spec) {
   return out;
 }
 
+/** Search Google Places once, then pin its exact returned coordinates in one batch. */
+async function searchPlaces(annotations, args = {}, runOptions = {}, isCurrent = () => true) {
+  const action = 'search_places';
+  const query = clampStr(args.query, MAX_TARGET_LEN);
+  const location = clampStr(args.location, MAX_TARGET_LEN);
+  const numericMax = Number(args.maxResults);
+  const requestedMax = Number.isFinite(numericMax)
+    ? Math.max(1, Math.floor(numericMax))
+    : MAX_PLACE_SEARCH_RESULTS;
+  const limit = Math.min(requestedMax, MAX_PLACE_SEARCH_RESULTS);
+  let capped = requestedMax > limit;
+
+  const base = { action, count: 0, requestedMax, limit, capped, partial: false, failed: 0 };
+  if (!annotations || typeof annotations.annotate !== 'function') {
+    return { ...base, ok: false, unavailable: true, error: t('voice.action.annotationUnavailable') };
+  }
+  if (!query) {
+    return { ...base, ok: false, error: 'Нужен поисковый запрос' };
+  }
+
+  const searchQuery = location ? `${query}, ${location}` : query;
+  const params = new URLSearchParams({ q: searchQuery, limit: String(limit) });
+  let response;
+  let data;
+  try {
+    response = await fetch(`/api/google/text-search?${params}`, {
+      ...(runOptions.signal ? { signal: runOptions.signal } : {}),
+    });
+    data = await response.json().catch(() => ({}));
+  } catch (error) {
+    return {
+      ...base,
+      ok: false,
+      cancelled: error?.name === 'AbortError' || !isCurrent(),
+      unavailable: error?.name !== 'AbortError',
+      error: error?.name === 'AbortError' ? 'Поиск мест отменён' : 'Поиск мест недоступен',
+    };
+  }
+  if (!isCurrent()) return { ...base, ok: false, cancelled: true, error: 'Поиск мест отменён' };
+  if (!response.ok) {
+    return {
+      ...base,
+      ok: false,
+      unavailable: true,
+      error: typeof data?.error === 'string' && data.error.trim()
+        ? data.error.trim().slice(0, MAX_LABEL_LEN)
+        : 'Поиск мест недоступен',
+    };
+  }
+
+  const places = Array.isArray(data?.places) ? data.places : [];
+  capped ||= Boolean(data?.capped || data?.hasMore || places.length > limit);
+  const selected = places.slice(0, limit);
+  const valid = selected.filter((place) => (
+    Number.isFinite(place?.latitude) && Number.isFinite(place?.longitude)
+    && place.latitude >= -90 && place.latitude <= 90
+    && place.longitude >= -180 && place.longitude <= 180
+  ));
+  const invalidCount = selected.length - valid.length;
+  const labels = valid.map((place) => (
+    clampStr(place.name || place.address || searchQuery, MAX_LABEL_LEN)
+  ));
+  if (!valid.length) {
+    return {
+      ...base,
+      capped,
+      ok: false,
+      empty: places.length === 0,
+      failed: invalidCount,
+      error: places.length ? 'Поиск вернул места без корректных координат' : 'Места по запросу не найдены',
+    };
+  }
+
+  if (!isCurrent()) return { ...base, ok: false, cancelled: true, error: 'Поиск мест отменён' };
+
+  const result = await annotations.annotate(valid.map((place, index) => ({
+    type: 'pin',
+    target: labels[index],
+    label: labels[index],
+    latitude: place.latitude,
+    longitude: place.longitude,
+    footprint: false,
+  })), {
+    clearPrevious: false,
+    persist: args.persist !== false,
+    flyTo: args.flyTo !== false,
+    ...(runOptions.signal ? { signal: runOptions.signal } : {}),
+  });
+  if (result?.aborted || !isCurrent()) {
+    return { ...base, ok: false, cancelled: true, error: 'Поиск мест отменён' };
+  }
+  const drawn = Number.isFinite(result?.drawn) ? result.drawn : 0;
+  const annotationFailed = Number.isFinite(result?.failed) ? result.failed : valid.length - drawn;
+  const failedLabels = [];
+  for (let i = 0; i < selected.length; i += 1) {
+    const place = selected[i];
+    if (!Number.isFinite(place?.latitude) || !Number.isFinite(place?.longitude)
+        || place.latitude < -90 || place.latitude > 90
+        || place.longitude < -180 || place.longitude > 180) {
+      failedLabels.push(clampStr(place?.name || place?.address || searchQuery, MAX_LABEL_LEN));
+    }
+  }
+  for (const item of (result?.results || [])) {
+    if (!item?.ok) failedLabels.push(item.target || item.label || 'место без названия');
+  }
+  const failed = invalidCount + annotationFailed;
+  return {
+    ok: drawn > 0,
+    action,
+    query,
+    location: location || null,
+    count: drawn,
+    requestedMax,
+    limit,
+    received: places.length,
+    capped: capped || Boolean(result?.capped),
+    partial: drawn > 0 && failed > 0,
+    failed,
+    failedLabels: failed ? failedLabels : undefined,
+    items: result?.results || [],
+    error: failed ? 'Не удалось отметить одно или несколько найденных мест' : null,
+  };
+}
+
 /**
  * Draw "whiteboard" annotations on the 3D world to point out what the agent is
  * talking about. Place names are resolved to real-world coordinates (and OSM
  * footprints) by the annotation engine, so the agent never has to guess pixels.
  */
-async function annotateMap(annotations, args = {}) {
+async function annotateMap(annotations, args = {}, runOptions = {}, isCurrent = () => true) {
   if (!annotations || typeof annotations.annotate !== 'function') {
-    return { ok: false, action: 'annotate_map', error: 'Annotation engine unavailable' };
+    return { ok: false, action: 'annotate_map', error: t('voice.action.annotationUnavailable') };
   }
   const raw = Array.isArray(args.annotations) ? args.annotations : [];
   if (!raw.length) {
-    return { ok: false, action: 'annotate_map', error: 'No annotations supplied' };
+    return { ok: false, action: 'annotate_map', error: t('voice.action.noAnnotations') };
   }
   if (raw.length > MAX_ANNOTATIONS_PER_CALL) {
     return {
       ok: false,
       action: 'annotate_map',
-      error: `Too many annotations in one call (${raw.length}); max ${MAX_ANNOTATIONS_PER_CALL}. Mark fewer places, or split across calls.`,
+      error: `Слишком много аннотаций в одном вызове (${raw.length}). Максимум: ${MAX_ANNOTATIONS_PER_CALL}. Отметьте меньше мест или разделите запрос.`,
     };
   }
   const requests = raw.map(sanitizeAnnotationSpec);
+  if (!isCurrent()) return { ok: false, action: 'annotate_map', cancelled: true, error: 'Аннотирование отменено' };
   const result = await annotations.annotate(requests, {
     // C1 invariant enforced in CODE (not just the prompt): the VOICE path NEVER clears as
     // a side effect of drawing — annotations accumulate/persist, and only an explicit
@@ -997,7 +1238,11 @@ async function annotateMap(annotations, args = {}) {
     clearPrevious: false,
     persist: args.persist !== false,
     flyTo: Boolean(args.flyTo),
+    ...(runOptions.signal ? { signal: runOptions.signal } : {}),
   });
+  if (result?.aborted || !isCurrent()) {
+    return { ok: false, action: 'annotate_map', cancelled: true, error: 'Аннотирование отменено' };
+  }
   // Honesty: surface partial failure explicitly so the agent can tell the user
   // which place(s) it couldn't mark instead of implying everything appeared.
   const drewSome = result.drawn > 0;
@@ -1008,7 +1253,7 @@ async function annotateMap(annotations, args = {}) {
     // Route failures carry the specific missing waypoint name(s) in failedTargets;
     // everything else names its own label/target.
     if (Array.isArray(r.failedTargets) && r.failedTargets.length) failedLabels.push(...r.failedTargets);
-    else failedLabels.push(r.target || r.label || 'an unnamed place'); // target (the place) before caption
+    else failedLabels.push(r.target || r.label || 'место без названия'); // target (the place) before caption
   }
   return {
     ok: drewSome,
@@ -1030,13 +1275,13 @@ async function annotateMap(annotations, args = {}) {
     // result never reads as a clean success — but keep it STATIC (no raw place text);
     // the actual names live only in the structured failedLabels DATA field, so the
     // model-facing prose can't carry injected instructions from a place name.
-    error: someFailed ? 'Could not place one or more annotations' : null,
+    error: someFailed ? 'Не удалось разместить одну или несколько аннотаций' : null,
   };
 }
 
 function clearAnnotations(annotations) {
   if (!annotations || typeof annotations.clear !== 'function') {
-    return { ok: false, action: 'clear_annotations', error: 'Annotation engine unavailable' };
+    return { ok: false, action: 'clear_annotations', error: t('voice.action.annotationUnavailable') };
   }
   annotations.clear();
   return { ok: true, action: 'clear_annotations' };
@@ -1054,7 +1299,7 @@ export function normalizeStackId(value) {
  */
 function controlScene(sceneDirector, args = {}) {
   if (!sceneDirector) {
-    return { ok: false, action: 'control_scene', error: 'Scene director unavailable' };
+    return { ok: false, action: 'control_scene', error: t('voice.action.sceneUnavailable') };
   }
   const sceneAction = String(args.action || '').toLowerCase();
 
@@ -1065,7 +1310,7 @@ function controlScene(sceneDirector, args = {}) {
     return { ok: true, action: 'control_scene', ...sceneDirector.getPlaybackStatus() };
   }
   if (sceneAction === 'stop') {
-    sceneDirector.stopScene('Stopped by voice');
+    sceneDirector.stopScene('Остановлено голосовой командой');
     return { ok: true, action: 'control_scene', running: false };
   }
   if (sceneAction === 'next') {
@@ -1074,18 +1319,18 @@ function controlScene(sceneDirector, args = {}) {
   }
   if (sceneAction === 'play') {
     if (sceneDirector.running) {
-      return { ok: false, action: 'control_scene', error: 'A scene is already running — stop it first' };
+      return { ok: false, action: 'control_scene', error: 'Сцена уже запущена. Сначала остановите её' };
     }
     const scene = args.sceneId
       ? sceneDirector.findSceneByQuery(args.sceneId)
       : (sceneDirector.listScenes()[0] || null);
     if (!scene) {
-      return { ok: false, action: 'control_scene', error: `No scene matched "${args.sceneId || ''}"`, scenes: sceneDirector.listScenes() };
+      return { ok: false, action: 'control_scene', error: `Сцена не найдена: "${args.sceneId || ''}"`, scenes: sceneDirector.listScenes() };
     }
     void sceneDirector.startScene(scene.id, { single: true });
     return { ok: true, action: 'control_scene', playing: scene.title, shots: scene.shots };
   }
-  throw new Error(`Unknown scene action: ${args.action || 'missing'}`);
+  throw new Error(`Неизвестная команда сцены: ${args.action || 'не указана'}`);
 }
 
 /** Voice CCTV control over the cctv layer module's public surface. */
@@ -1093,7 +1338,7 @@ export async function controlCctv(dataManager, args = {}, styleManager = null) {
   const action = String(args.action || '').toLowerCase();
   const cctv = dataManager.layers.get('cctv')?.module;
   if (!cctv) {
-    return { ok: false, action: 'control_cctv', error: 'CCTV layer unavailable' };
+    return { ok: false, action: 'control_cctv', error: t('voice.action.cctvUnavailable') };
   }
 
   if (action === 'enable' || action === 'disable') {
@@ -1101,7 +1346,7 @@ export async function controlCctv(dataManager, args = {}, styleManager = null) {
     return { ok: true, action: 'control_cctv', enabled: dataManager.isEnabled('cctv') };
   }
   if (!dataManager.isEnabled('cctv')) {
-    return { ok: false, action: 'control_cctv', error: 'CCTV layer is off — enable it first' };
+    return { ok: false, action: 'control_cctv', error: t('voice.action.cctvOff') };
   }
 
   const summarize = () => {
@@ -1120,13 +1365,13 @@ export async function controlCctv(dataManager, args = {}, styleManager = null) {
 
   if (action === 'select') {
     const query = String(args.cameraQuery || '').trim().toLowerCase();
-    if (!query) throw new Error('control_cctv select needs cameraQuery');
+    if (!query) throw new Error('Для control_cctv select нужен cameraQuery');
     const cams = cctv.getUIState?.()?.cameras || [];
     const match = cams.find((cam) => String(cam.id || '').toLowerCase() === query)
       || cams.find((cam) => String(cam.name || '').toLowerCase() === query)
       || cams.find((cam) => String(cam.name || '').toLowerCase().includes(query));
     if (!match) {
-      return { ok: false, action: 'control_cctv', error: `No camera matched "${args.cameraQuery}"`, ...summarize() };
+      return { ok: false, action: 'control_cctv', error: `Камера не найдена: "${args.cameraQuery}"`, ...summarize() };
     }
     styleManager?.supersedeDeferredNavigation?.();
     const selected = cctv.selectCamera(match.id);
@@ -1198,14 +1443,14 @@ export async function controlCctv(dataManager, args = {}, styleManager = null) {
     dataManager.setLayerParams('cctv', { [key]: next }, { origin: 'voice' });
     return { ok: true, action: 'control_cctv', ...summarize() };
   }
-  throw new Error(`Unknown CCTV action: ${args.action || 'missing'}`);
+  throw new Error(`Неизвестная команда CCTV: ${args.action || 'не указана'}`);
 }
 
 const RADIO_COUNTRY_CENTERS = new Map([
-  ['us', { lat: 39.8, lon: -98.6, country: 'US', label: 'United States' }],
-  ['usa', { lat: 39.8, lon: -98.6, country: 'US', label: 'United States' }],
-  ['united states', { lat: 39.8, lon: -98.6, country: 'US', label: 'United States' }],
-  ['united states of america', { lat: 39.8, lon: -98.6, country: 'US', label: 'United States' }],
+  ['us', { lat: 39.8, lon: -98.6, country: 'US', label: 'США' }],
+  ['usa', { lat: 39.8, lon: -98.6, country: 'US', label: 'США' }],
+  ['united states', { lat: 39.8, lon: -98.6, country: 'US', label: 'США' }],
+  ['united states of america', { lat: 39.8, lon: -98.6, country: 'US', label: 'США' }],
 ]);
 
 /** Resolve curated cities and common country requests without moving the camera. */
@@ -1217,7 +1462,7 @@ export function knownRadioLocation(query, locationId = '') {
     return {
       lat: bounds ? (bounds.southwest.lat + bounds.northeast.lat) / 2 : city.pois[0]?.lat,
       lon: bounds ? (bounds.southwest.lng + bounds.northeast.lng) / 2 : city.pois[0]?.lon,
-      label: city.name,
+      label: city.label || city.name,
       country: '',
     };
   }
@@ -1249,7 +1494,7 @@ function radioActionIsCurrent(options = {}) {
 }
 
 function radioAbortError() {
-  const error = new Error('Radio request was superseded by a newer voice turn');
+  const error = new Error(t('voice.action.radioSuperseded'));
   error.name = 'AbortError';
   return error;
 }
@@ -1264,17 +1509,16 @@ async function resolveRadioLocation(args = {}, coordinates = radioCoordinatePair
   const known = knownRadioLocation(query, args.locationId);
   if (known) return known;
   if (!query) return null;
-  const apiKey = window.__GOOGLE_MAPS_API_KEY__ || import.meta.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) throw new Error('No Google Maps API key available for Radio location search');
   const controller = new AbortController();
   const cancelFromTurn = () => controller.abort();
   if (options.signal?.aborted) throw radioAbortError();
   options.signal?.addEventListener('abort', cancelFromTurn, { once: true });
   const timer = setTimeout(() => controller.abort(), 6000);
   try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`;
+    const url = `/api/google/geocode?address=${encodeURIComponent(query)}&language=ru`;
     const response = await fetch(url, { signal: controller.signal });
     const body = await response.json();
+    if (body.configured === false) throw new Error('Нет серверного ключа Google Maps API для поиска местоположения Radio');
     if (!radioActionIsCurrent(options)) throw radioAbortError();
     const result = body.status === 'OK' ? body.results?.[0] : null;
     if (!result?.geometry?.location) return null;
@@ -1317,7 +1561,7 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
     return {
       ok: false,
       action: 'control_radio',
-      error: 'Radio layer unavailable',
+      error: t('voice.action.radioUnavailable'),
       ...readRadioLifecycle(),
     };
   }
@@ -1337,7 +1581,7 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
     ok: false,
     action: 'control_radio',
     cancelled: true,
-    error: 'Radio request was superseded by a newer voice turn',
+    error: t('voice.action.radioSuperseded'),
     ...intentSummary(),
     ...summarize(),
   });
@@ -1417,7 +1661,7 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
     return {
       ok: false,
       action: 'control_radio',
-      error: 'Radio country must be a recognized code or country name (80 characters maximum)',
+      error: 'Страна для Radio должна быть указана распознаваемым кодом или названием, не длиннее 80 символов',
       ...summarize(),
     };
   }
@@ -1426,7 +1670,7 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
     return {
       ok: false,
       action: 'control_radio',
-      error: 'Radio coordinates require a complete numeric latitude/longitude pair in range',
+      error: 'Для Radio нужна полная числовая пара широты и долготы в допустимом диапазоне',
       ...summarize(),
     };
   }
@@ -1439,7 +1683,7 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
     if (!radioActionIsCurrent(options) && lastIntentOutcome?.succeeded !== true) return cancelled(summarize);
     if (!changed) {
       return lifecycleFailure(
-        `Radio could not be ${shouldEnable ? 'enabled' : 'disabled'}`,
+        `Не удалось ${shouldEnable ? 'включить' : 'выключить'} Radio`,
         summarize,
       );
     }
@@ -1449,12 +1693,12 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
   if (action === 'volume') {
     const volumePct = Number(args.volumePct);
     if (!Number.isFinite(volumePct) || volumePct < 0 || volumePct > 100) {
-      return { ok: false, action: 'control_radio', error: 'Radio volume must be from 0 to 100', ...summarize() };
+      return { ok: false, action: 'control_radio', error: 'Громкость Radio должна быть от 0 до 100', ...summarize() };
     }
     const authorized = await authorizeRadioPlayerMutation();
     if (!radioActionIsCurrent(options)) return cancelled(summarize);
     if (!authorized) {
-      return lifecycleFailure('Radio must be fully enabled before changing volume', summarize);
+      return lifecycleFailure('Перед изменением громкости Radio нужно полностью включить', summarize);
     }
     if (!radioActionIsCurrent(options)) return cancelled(summarize);
     const volumeApplied = typeof dataManager.setLayerParams === 'function'
@@ -1464,7 +1708,7 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
       return {
         ok: false,
         action: 'control_radio',
-        error: 'Radio must be fully enabled before changing volume',
+        error: 'Перед изменением громкости Radio нужно полностью включить',
         ...summarize(),
       };
     }
@@ -1479,7 +1723,7 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
       return {
         ok: false,
         action: 'control_radio',
-        error: error?.message || 'Radio could not be stopped',
+        error: error?.message || 'Не удалось остановить Radio',
         ...summarize(),
       };
     }
@@ -1488,7 +1732,7 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
       return {
         ok: false,
         action: 'control_radio',
-        error: 'Radio could not be stopped',
+        error: 'Не удалось остановить Radio',
         ...summarize(),
       };
     }
@@ -1509,7 +1753,7 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
       return {
         ok: false,
         action: 'control_radio',
-        error: 'Radio could not be paused',
+        error: 'Не удалось поставить Radio на паузу',
         ...summarize(),
       };
     }
@@ -1527,18 +1771,18 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
     }
     if (!radioActionIsCurrent(options)) return cancelled(summarize);
     if ((args.locationQuery || args.locationId) && !resolvedLocation) {
-      return { ok: false, action: 'control_radio', error: `Could not resolve Radio location "${args.locationQuery || args.locationId}"`, ...summarize() };
+      return { ok: false, action: 'control_radio', error: `Не удалось определить место для Radio: "${args.locationQuery || args.locationId}"`, ...summarize() };
     }
   }
   const authorized = await authorizeRadioPlayerMutation({ enableIfOff: true });
   if (!radioActionIsCurrent(options)) return cancelled(summarize);
   if (!authorized) {
-    return lifecycleFailure('Radio could not be enabled', summarize);
+    return lifecycleFailure('Не удалось включить Radio', summarize);
   }
   const state = radio.getUIState?.() || {};
   if (!radioActionIsCurrent(options)) return cancelled(summarize);
   if (!state.stationCount) {
-    return { ok: false, action: 'control_radio', error: state.error || 'No healthy Radio stations are available', ...summarize() };
+    return { ok: false, action: 'control_radio', error: state.error || 'Нет доступных рабочих станций Radio', ...summarize() };
   }
   if (action === 'play' || action === 'resume') {
     if (!radioActionIsCurrent(options)) return cancelled(summarize);
@@ -1584,7 +1828,7 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
       stationQuery: String(args.stationQuery || ''),
     }, { autoplay: false });
     if (!station) {
-      return { ok: false, action: 'control_radio', error: 'No Radio station matched that location and category', ...summarize() };
+      return { ok: false, action: 'control_radio', error: 'Ни одна станция Radio не совпала с этим местом и категорией', ...summarize() };
     }
     return {
       ok: true,
@@ -1594,7 +1838,7 @@ export async function controlRadio(viewer, dataManager, args = {}, options = {})
       ...summarize(),
     };
   }
-  throw new Error(`Unknown Radio action: ${args.action || 'missing'}`);
+  throw new Error(`Неизвестная команда Radio: ${args.action || 'не указана'}`);
 }
 
 /**
@@ -1612,19 +1856,19 @@ export function cctvVoiceFocusOutcome(focusResult, { cameraSelected = false } = 
     return {
       ok: false,
       error: cameraSelected
-        ? 'Camera selected; tracking holds the view — say untrack to fly'
-        : 'Camera active; tracking holds the view — say untrack first',
+        ? 'Камера выбрана, но вид удерживает слежение. Скажите «прекрати слежение», чтобы перейти к ней'
+        : 'Камера активна, но вид удерживает слежение. Сначала скажите «прекрати слежение»',
     };
   }
   if (focusResult === CCTV_FOCUS_RESULT.COCKPIT_ACTIVE) {
     return {
       ok: false,
       error: cameraSelected
-        ? 'Camera selected; in cockpit — exit cockpit to fly to it'
-        : 'In cockpit — exit cockpit to fly to a camera',
+        ? 'Камера выбрана, но активна кабина. Выйдите из кабины, чтобы перейти к камере'
+        : 'Активна кабина. Выйдите из неё, чтобы перейти к камере',
     };
   }
-  return { ok: false, error: 'No active camera to focus' };
+  return { ok: false, error: t('voice.action.noActiveCamera') };
 }
 
 /**
@@ -1653,20 +1897,20 @@ export function formatTrackedEntityLabel(found, query = '') {
 /** Finds and tracks/selects an entity by spoken query across layer families. */
 async function trackEntity(viewer, dataManager, styleManager, args = {}) {
   const query = String(args.query || '').trim();
-  if (!query) throw new Error('track_entity needs a query');
+  if (!query) throw new Error('Для track_entity нужен поисковый запрос');
 
   // Fire queries route to the FIRMS layer's strongest detection
   if (/\bfires?\b/i.test(query)) {
     if (!dataManager.isEnabled('local-firms')) {
-      return { ok: false, action: 'track_entity', query, error: 'The FIRMS fires layer is not enabled' };
+      return { ok: false, action: 'track_entity', query, error: 'Слой пожаров FIRMS не включён' };
     }
     const firms = dataManager.layers.get('local-firms')?.module;
     const strongest = firms?.getStrongestFire?.();
     if (!strongest) {
-      return { ok: false, action: 'track_entity', query, error: 'No fire detections loaded yet' };
+      return { ok: false, action: 'track_entity', query, error: 'Данные об обнаруженных пожарах ещё не загружены' };
     }
     if (!Number.isFinite(strongest.latitude) || !Number.isFinite(strongest.longitude)) {
-      return { ok: false, action: 'track_entity', query, error: 'The strongest fire has no usable position' };
+      return { ok: false, action: 'track_entity', query, error: 'Для самого сильного пожара нет подходящей позиции' };
     }
     return runManagedVoiceNavigation(styleManager, 'fire', 'track_entity', () => {
       flyToLandmark(viewer, strongest.latitude, strongest.longitude, {
@@ -1674,7 +1918,7 @@ async function trackEntity(viewer, dataManager, styleManager, args = {}) {
       });
       return {
         ok: true, action: 'track_entity', kind: 'fire', layerId: 'local-firms',
-        label: strongest.label || 'Strongest fire',
+        label: strongest.label || 'Самый сильный пожар',
         latitude: strongest.latitude, longitude: strongest.longitude,
         frp: strongest.frp ?? null,
       };
@@ -1699,7 +1943,7 @@ async function trackEntity(viewer, dataManager, styleManager, args = {}) {
       && (!Number.isFinite(found.latitude) || !Number.isFinite(found.longitude))) {
       return {
         ok: false, action: 'track_entity', layerId: family.layerId, kind: family.kind,
-        error: 'The matched vessel has no usable position',
+        error: 'Для найденного судна нет подходящей позиции',
       };
     }
 
@@ -1729,13 +1973,13 @@ async function trackEntity(viewer, dataManager, styleManager, args = {}) {
         latitude: found.latitude ?? null,
         longitude: found.longitude ?? null,
         altitudeM: Number.isFinite(found.altitudeM) ? Math.round(found.altitudeM) : null,
-        error: trackedOk ? null : 'Match found but tracking failed',
+        error: trackedOk ? null : 'Цель найдена, но слежение не запустилось',
       };
     });
   }
 
-  const disabledNote = skippedDisabled.length ? ` (disabled layers skipped: ${skippedDisabled.join(', ')})` : '';
-  return { ok: false, action: 'track_entity', query, error: `Nothing matched "${query}"${disabledNote}` };
+  const disabledNote = skippedDisabled.length ? ` (пропущены выключенные слои: ${skippedDisabled.join(', ')})` : '';
+  return { ok: false, action: 'track_entity', query, error: `Ничего не найдено по запросу "${query}"${disabledNote}` };
 }
 
 /** Releases tracking/selection on every entity layer family. */
@@ -1786,7 +2030,7 @@ function stopAllTracking(viewer, dataManager) {
       action: 'stop_tracking',
       released,
       failedLayerIds,
-      error: `Tracking could not be cleared for: ${failedLayerIds.join(', ')}`,
+      error: t('voice.action.trackingClearFailed', { layers: failedLayerIds.join(', ') }),
     };
   }
   return { ok: true, action: 'stop_tracking', released };
@@ -1803,10 +2047,10 @@ async function frameOverhead(viewer, dataManager, styleManager, args = {}) {
   const targetRaw = String(args.target || 'flights').toLowerCase();
   const layerId = FRAME_TARGETS.get(targetRaw) || normalizeLayerId(targetRaw) || 'flights';
   if (!dataManager.layers.has(layerId)) {
-    return { ok: false, action: 'frame_overhead', error: `Unknown target layer: ${args.target}` };
+    return { ok: false, action: 'frame_overhead', error: `Неизвестный целевой слой: ${args.target}` };
   }
   if (!dataManager.isEnabled(layerId)) {
-    return { ok: false, action: 'frame_overhead', layerId, error: `The ${layerId} layer is not enabled` };
+    return { ok: false, action: 'frame_overhead', layerId, error: `Слой ${layerId} не включён` };
   }
   const module = dataManager.layers.get(layerId)?.module;
   const isSatellites = layerId === 'satellites';
@@ -1828,7 +2072,7 @@ async function frameOverhead(viewer, dataManager, styleManager, args = {}) {
   if (!entries.length) {
     return {
       ok: false, action: 'frame_overhead', layerId, radiusKm: Math.round(radiusKm), count: 0,
-      error: `No ${targetRaw} within ${Math.round(radiusKm)} km of the current view`,
+      error: `В радиусе ${Math.round(radiusKm)} км от текущего вида нет целей ${targetRaw}`,
     };
   }
 
@@ -1872,11 +2116,11 @@ async function frameOverhead(viewer, dataManager, styleManager, args = {}) {
 /** Run one validated voice camera mutation through the UI-owned authority seam. */
 function runManagedVoiceNavigation(styleManager, noun, action, navigate, releaseOptions = undefined) {
   if (typeof styleManager?.runImmediateNavigation !== 'function') {
-    return { ok: false, action, error: 'Camera navigation policy unavailable' };
+    return { ok: false, action, error: t('voice.action.cameraPolicyUnavailable') };
   }
   const result = styleManager.runImmediateNavigation(noun, navigate, releaseOptions);
   if (result !== false) return result;
-  return { ok: false, action, error: 'Camera navigation is unavailable in the current view' };
+  return { ok: false, action, error: t('voice.action.cameraNavigationUnavailable') };
 }
 
 /** Gathers tracked/selected entities across layer families for read-back. */
@@ -1980,7 +2224,7 @@ function installViewTargetPrewarm(viewer) {
 function adjustCameraZoom(viewer, args) {
   const direction = String(args.direction || '').toLowerCase();
   if (direction !== 'in' && direction !== 'out') {
-    throw new Error('adjust_camera_zoom direction must be "in" or "out"');
+    throw new Error('Направление adjust_camera_zoom должно быть "in" или "out"');
   }
 
   const amount = String(args.amount || 'little').toLowerCase();
@@ -1989,7 +2233,7 @@ function adjustCameraZoom(viewer, args) {
     medium: 0.55,
     lot: 1.0,
   }[amount];
-  if (!fraction) throw new Error(`Unknown zoom amount: ${args.amount}`);
+  if (!fraction) throw new Error(`Неизвестная величина масштаба: ${args.amount}`);
 
   const camera = viewer.camera;
   const beforePosition = Cesium.Cartesian3.clone(camera.positionWC);
@@ -2012,7 +2256,7 @@ function adjustCameraZoom(viewer, args) {
         action: 'adjust_camera_zoom',
         direction,
         amount,
-        error: 'Camera is already at the minimum target distance',
+        error: t('voice.action.cameraAtMinimumDistance'),
       };
     }
     camera.zoomIn(safeMovementM);
@@ -2032,11 +2276,11 @@ function adjustCameraZoom(viewer, args) {
     movementActualM: Math.round(movedM),
     beforeHeightM: Math.round(beforeHeightM),
     afterHeightM: Math.round(afterHeightM),
-    error: moved ? null : 'Cesium camera position did not change',
+    error: moved ? null : t('voice.action.cameraDidNotMove'),
   };
 }
 
-const COMPASS_16 = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+const COMPASS_16 = ['С','ССВ','СВ','ВСВ','В','ВЮВ','ЮВ','ЮЮВ','Ю','ЮЮЗ','ЮЗ','ЗЮЗ','З','ЗСЗ','СЗ','ССЗ'];
 
 function compassDir(azDeg) {
   return COMPASS_16[Math.round(((((azDeg % 360) + 360) % 360)) / 22.5) % 16];
@@ -2047,7 +2291,7 @@ function nextIssPass(viewer, args) {
   let lonDeg = Number.isFinite(args.longitude) ? args.longitude : null;
   if (latDeg == null || lonDeg == null) {
     const carto = viewer?.camera?.positionCartographic;
-    if (!carto) throw new Error('Camera position unavailable');
+    if (!carto) throw new Error(t('voice.action.cameraPositionUnavailable'));
     latDeg = Cesium.Math.toDegrees(carto.latitude);
     lonDeg = Cesium.Math.toDegrees(carto.longitude);
   }
@@ -2057,14 +2301,14 @@ function nextIssPass(viewer, args) {
     return {
       ok: false,
       action: 'next_iss_pass',
-      error: 'ISS orbital elements not loaded yet — enable the satellites layer once, then ask again.',
+      error: 'Орбитальные элементы ISS ещё не загружены. Включите слой спутников, затем повторите запрос.',
     };
   }
   if (result.status === 'none') {
     return {
       ok: false,
       action: 'next_iss_pass',
-      error: `No ISS pass above ${minElevDeg}° in the next 24 hours for this location.`,
+      error: `В ближайшие 24 часа над этим местом нет прохода ISS выше ${minElevDeg}°.`,
     };
   }
   const { pass } = result;
@@ -2080,14 +2324,14 @@ function nextIssPass(viewer, args) {
   };
 }
 
-function normalizePanelId(value) {
+export function normalizePanelId(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
   if (PANEL_IDS.has(raw)) return raw;
   return PANEL_ALIASES.get(raw.toLowerCase()) || null;
 }
 
-function normalizeLayerId(value) {
+export function normalizeLayerId(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
   if (LAYER_ALIASES.has(raw.toLowerCase())) return LAYER_ALIASES.get(raw.toLowerCase());
@@ -2100,19 +2344,22 @@ function normalizeCockpitTargetLayer(value) {
   return layerId;
 }
 
-function normalizeCockpitNavigationHints(rawAction) {
+export function normalizeCockpitNavigationHints(rawAction) {
   const raw = String(rawAction || '').trim().toLowerCase();
   if (!raw) return {};
 
   const targetLayer = raw.includes('vessel') || raw.includes('ship') || raw.includes('ais')
+    || raw.includes('судн') || raw.includes('корабл')
     ? 'ais-live-vessels'
     : raw.includes('installation') || raw.includes('facility') || raw.includes('base')
+      || raw.includes('объект') || raw.includes('баз')
       ? 'military-installations'
-      : raw.includes('military')
+      : raw.includes('military') || raw.includes('военн')
         ? 'military'
         : null;
 
   const aircraftClass = raw.includes('helicopter') || raw.includes('helo') || raw.includes('chopper')
+    || raw.includes('вертол')
     ? 'helicopter'
     : null;
 
@@ -2142,6 +2389,7 @@ function normalizeCockpitNavigationHints(rawAction) {
 function normalizeAircraftClassFilter(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) return null;
+  if (raw.startsWith('вертол')) return 'helicopter';
   return raw.replace(/[\s-]+/g, '') === TR3B_CLASS ? TR3B_CLASS : raw;
 }
 
@@ -2154,13 +2402,13 @@ function setPanelOpen(styleManager, panelId, open) {
   }
 }
 
-function normalizeContextMode(value) {
+export function normalizeContextMode(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) return null;
   return CONTEXT_MODE_ALIASES.get(raw) || null;
 }
 
-function normalizeCockpitAction(value) {
+export function normalizeCockpitAction(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) return null;
 
@@ -2168,17 +2416,17 @@ function normalizeCockpitAction(value) {
   if (direct) return direct;
 
   const normalized = raw
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/[^\p{L}0-9]+/gu, ' ')
     .trim()
     .replace(/\s+/g, ' ');
   const directNormalized = COCKPIT_ACTION_ALIASES.get(normalized);
   if (directNormalized) return directNormalized;
 
-  if (/\bprevious\b|\bprev\b/.test(normalized)) return 'previous';
-  if (/\bstatus\b|\bstate\b/.test(normalized)) return 'status';
-  if (/\bexit\b|\bleave\b|\bquit\b/.test(normalized)) return 'exit';
-  if (/\benter\b|\bopen\b|\bstart\b/.test(normalized)) return 'enter';
-  if (/\bnext\b|\bclosest\b|\bnearby\b|\bnearest\b/.test(normalized)) return 'next';
+  if (/\bprevious\b|\bprev\b|предыдущ(?:ий|ая|ее)|назад/u.test(normalized)) return 'previous';
+  if (/\bstatus\b|\bstate\b|статус|состояние/u.test(normalized)) return 'status';
+  if (/\bexit\b|\bleave\b|\bquit\b|выйти|выход/u.test(normalized)) return 'exit';
+  if (/\benter\b|\bopen\b|\bstart\b|войти|вход/u.test(normalized)) return 'enter';
+  if (/\bnext\b|\bclosest\b|\bnearby\b|\bnearest\b|следующ(?:ий|ая|ее)|далее/u.test(normalized)) return 'next';
 
   return null;
 }
@@ -2196,11 +2444,14 @@ function focusDataLayerRow(layerId) {
 }
 
 
-function normalizeStyle(value) {
+export function normalizeStyle(value) {
   const raw = String(value || '').trim().toLowerCase();
-  if (raw === 'filter off' || raw === 'off' || raw === 'default') return 'normal';
-  if (raw === 'night vision' || raw === 'nvg') return 'surveillance';
-  if (raw === 'flir') return 'thermal';
+  if (['filter off', 'off', 'default', 'обычный', 'обычный стиль', 'без фильтра', 'выкл'].includes(raw)) return 'normal';
+  if (['night vision', 'nvg', 'ночное видение', 'ночной'].includes(raw)) return 'surveillance';
+  if (['flir', 'тепловизор', 'тепловой', 'тепловизионный'].includes(raw)) return 'thermal';
+  if (raw === 'аниме') return 'anime';
+  if (raw === 'нуар') return 'noir';
+  if (raw === 'снег') return 'snow';
   if (ALLOWED_STYLES.has(raw)) return raw;
   return null;
 }
@@ -2252,12 +2503,12 @@ async function flyToRequestedLocation(viewer, args, {
       onStart: immediateOnStart,
       ...arrivalHooks,
     }));
-    if (result === false) return cancelled(CITY_POIS[locationId]?.name || locationId);
+    if (result === false) return cancelled(CITY_POIS[locationId]?.label || CITY_POIS[locationId]?.name || locationId);
     const response = {
       ok: Boolean(result),
       action: 'fly_to_location',
       locationId,
-      label: CITY_POIS[locationId]?.name || locationId,
+      label: CITY_POIS[locationId]?.label || CITY_POIS[locationId]?.name || locationId,
       rangeM: result?.range ? Math.round(result.range) : (rangeM || null),
       navigationMode: rangeM
         ? 'explicit-range'
@@ -2305,12 +2556,12 @@ async function flyToRequestedLocation(viewer, args, {
         ...(rangeM ? { range: rangeM } : {}),
       }));
       const poi = CITY_POIS[poiMatch.cityId]?.pois?.[poiMatch.index];
-      if (result === false) return cancelled(poi?.name || query);
+      if (result === false) return cancelled(poi?.label || poi?.name || query);
       const response = {
         ok: Boolean(result),
         action: 'fly_to_location',
         query,
-        label: poi?.name || query,
+        label: poi?.label || poi?.name || query,
         navigationMode: rangeM ? 'preset-poi-range' : 'preset-poi',
         rangeM: result?.range ? Math.round(result.range) : (rangeM || null),
       };
@@ -2343,10 +2594,10 @@ async function flyToRequestedLocation(viewer, args, {
     return afterArrival(response, response.label);
   }
 
-  throw new Error('fly_to_location needs a locationId, query, or latitude/longitude');
+  throw new Error('Для fly_to_location нужен locationId, поисковый запрос или широта и долгота');
 }
 
-function normalizeLocationId(value) {
+export function normalizeLocationId(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) return null;
   if (CITY_POIS[raw]) return raw;
@@ -2467,7 +2718,7 @@ function aircraftProximityWindowForQuery(args, result) {
     ok: true,
     action: 'analyst_query',
     count,
-    scopeLabel: `within ${radiusKm} km of ${label}`,
+    scopeLabel: `в радиусе ${radiusKm} км от ${label}`,
     truncated: false,
     items: items.slice(0, Math.round(clampNumber(args.limit, 1, 50, 12))).map((item) => ({
       layerKey: item.layerKey,
@@ -2481,7 +2732,7 @@ function aircraftProximityWindowForQuery(args, result) {
       layersQueried: result?.coverage?.layersQueried || [],
       scope: `window:${radiusKm}km@${label}`,
       followUp: false,
-      note: 'Contacts window engine — the same computation and cohort the Contacts panel displays, so this count matches the panel exactly — counts cover loaded data; the flights layer loads by viewport.',
+      note: 'Расчёт выполнен тем же модулем и по той же группе, которые показаны на панели Контакты. Число точно соответствует панели и учитывает загруженные данные; слой полётов загружается по области просмотра.',
     },
     // (D) The answer always says whose window it is and which engine produced it.
     window: {
@@ -2733,9 +2984,9 @@ function nearbyKnownLandmarks(latitude, longitude, cameraHeightM) {
       const distanceKm = haversineKm(latitude, longitude, poi.lat, poi.lon);
       if (distanceKm > maxDistanceKm) continue;
       matches.push({
-        name: poi.name,
+        name: poi.label || poi.name,
         cityId,
-        city: city.name,
+        city: city.label || city.name,
         latitude: poi.lat,
         longitude: poi.lon,
         distanceKm: Number(distanceKm.toFixed(3)),
@@ -2760,24 +3011,32 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 function coarseBasemapPlace(viewScale, latitude, longitude, inferredCountry = null) {
   if (viewScale === 'global') {
     return {
-      formattedAddress: 'Global Earth view',
+      formattedAddress: 'Глобальный вид Земли',
       locality: null,
       region: null,
       country: null,
       precision: 'global',
-      note: 'Camera is too far out for a precise street or city label; do not infer a local place from the center point.',
+      note: 'Камера слишком далеко для точного определения улицы или города. Не следует выводить конкретное место только по центру вида.',
     };
   }
+  const scaleLabel = {
+    street: 'улица',
+    city: 'город',
+    metro: 'агломерация',
+    regional: 'регион',
+    region: 'регион',
+    country: 'страна',
+  }[viewScale] || viewScale;
   return {
     formattedAddress: inferredCountry?.country
-      ? `${viewScale[0].toUpperCase()}${viewScale.slice(1)} basemap view over ${inferredCountry.country}`
-      : `${viewScale[0].toUpperCase()}${viewScale.slice(1)} basemap view centered near ${latitude.toFixed(2)}, ${longitude.toFixed(2)}`,
+      ? `Обзор подложки над ${inferredCountry.country}, масштаб: ${scaleLabel}`
+      : `Обзор подложки около ${latitude.toFixed(2)}, ${longitude.toFixed(2)}, масштаб: ${scaleLabel}`,
     locality: null,
     region: null,
     country: inferredCountry?.country || null,
     precision: viewScale,
     confidence: inferredCountry?.confidence || null,
-    note: 'Camera altitude is high, so this is approximate basemap context rather than a precise address.',
+    note: 'Камера находится высоко, поэтому это приблизительный контекст подложки, а не точный адрес.',
   };
 }
 
@@ -2912,21 +3171,21 @@ function inferCountryFromSamples(samples) {
 
 function inferCountry(latitude, longitude) {
   const regions = [
-    { name: 'Iran', south: 24.0, north: 40.2, west: 44.0, east: 63.5 },
-    { name: 'Iraq', south: 29.0, north: 37.5, west: 38.5, east: 49.0 },
-    { name: 'Turkey', south: 35.5, north: 42.5, west: 25.5, east: 45.2 },
-    { name: 'Saudi Arabia', south: 16.0, north: 32.5, west: 34.0, east: 56.5 },
-    { name: 'Afghanistan', south: 29.0, north: 38.8, west: 60.0, east: 75.5 },
-    { name: 'Pakistan', south: 23.0, north: 37.2, west: 60.5, east: 77.5 },
-    { name: 'Turkmenistan', south: 35.0, north: 42.9, west: 52.0, east: 66.8 },
-    { name: 'Azerbaijan', south: 38.3, north: 41.9, west: 44.6, east: 50.8 },
-    { name: 'Armenia', south: 38.7, north: 41.4, west: 43.4, east: 46.7 },
-    { name: 'Japan', south: 24.0, north: 46.5, west: 122.0, east: 146.5 },
-    { name: 'South Korea', south: 33.0, north: 38.8, west: 124.0, east: 132.0 },
-    { name: 'North Korea', south: 37.5, north: 43.2, west: 124.0, east: 131.0 },
-    { name: 'China', south: 18.0, north: 53.8, west: 73.0, east: 135.2 },
-    { name: 'Russia', south: 41.0, north: 82.0, west: 19.0, east: 180.0 },
-    { name: 'United States', south: 24.0, north: 49.8, west: -125.0, east: -66.0 },
+    { name: 'Иран', south: 24.0, north: 40.2, west: 44.0, east: 63.5 },
+    { name: 'Ирак', south: 29.0, north: 37.5, west: 38.5, east: 49.0 },
+    { name: 'Турция', south: 35.5, north: 42.5, west: 25.5, east: 45.2 },
+    { name: 'Саудовская Аравия', south: 16.0, north: 32.5, west: 34.0, east: 56.5 },
+    { name: 'Афганистан', south: 29.0, north: 38.8, west: 60.0, east: 75.5 },
+    { name: 'Пакистан', south: 23.0, north: 37.2, west: 60.5, east: 77.5 },
+    { name: 'Туркменистан', south: 35.0, north: 42.9, west: 52.0, east: 66.8 },
+    { name: 'Азербайджан', south: 38.3, north: 41.9, west: 44.6, east: 50.8 },
+    { name: 'Армения', south: 38.7, north: 41.4, west: 43.4, east: 46.7 },
+    { name: 'Япония', south: 24.0, north: 46.5, west: 122.0, east: 146.5 },
+    { name: 'Южная Корея', south: 33.0, north: 38.8, west: 124.0, east: 132.0 },
+    { name: 'Северная Корея', south: 37.5, north: 43.2, west: 124.0, east: 131.0 },
+    { name: 'Китай', south: 18.0, north: 53.8, west: 73.0, east: 135.2 },
+    { name: 'Россия', south: 41.0, north: 82.0, west: 19.0, east: 180.0 },
+    { name: 'США', south: 24.0, north: 49.8, west: -125.0, east: -66.0 },
   ];
   const region = regions.find((item) => (
     latitude >= item.south &&
@@ -2938,15 +3197,14 @@ function inferCountry(latitude, longitude) {
 }
 
 async function reverseGeocode(latitude, longitude) {
-  const apiKey = window.__GOOGLE_MAPS_API_KEY__;
-  if (!apiKey || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   const key = reverseGeocodeKey(latitude, longitude);
   if (reverseGeocodeCache.has(key)) return reverseGeocodeCache.get(key);
   if (reverseGeocodeInFlight.has(key)) return reverseGeocodeInFlight.get(key);
 
   const request = (async () => {
     try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${encodeURIComponent(`${latitude},${longitude}`)}&key=${apiKey}`;
+      const url = `/api/google/geocode?latlng=${encodeURIComponent(`${latitude},${longitude}`)}&language=ru`;
       const response = await fetchWithTimeout(url, {}, 5000);
       const data = await response.json();
       if (data.status !== 'OK' || !data.results?.length) {
@@ -3269,11 +3527,11 @@ function cleanText(value) {
 }
 
 function layerTitle(layerId) {
-  if (layerId === 'local-datacenters') return 'Datacenter';
-  if (layerId === 'local-dams') return 'Dam';
-  if (layerId === 'telegeography-submarine-cables') return 'Submarine Cable';
-  if (layerId === 'local-firms') return 'Active Fire';
-  return layerId || 'Entity';
+  if (layerId === 'local-datacenters') return 'ЦОД';
+  if (layerId === 'local-dams') return 'Плотина';
+  if (layerId === 'telegeography-submarine-cables') return 'Подводный кабель';
+  if (layerId === 'local-firms') return 'Активный пожар';
+  return layerId || 'Объект';
 }
 
 function clampNumber(value, min, max, fallback) {
@@ -3393,7 +3651,7 @@ async function runAnalystQuery(viewer, dataManager, args = {}) {
     })
     .map((l) => l.layerKey);
   if (warming.length) {
-    result.coverage.warmup = `${warming.join(', ')} enabled moments ago — data is still loading; counts will rise for ~30-45s. Say so.`;
+    result.coverage.warmup = `Слои ${warming.join(', ')} включены недавно. Данные ещё загружаются, число объектов может расти примерно 30-45 секунд.`;
   }
   // A radius/view count over a viewport-loaded layer counts what is LOADED, and
   // the flights layer reloads as the camera moves — so this number can sit well
@@ -3403,7 +3661,7 @@ async function runAnalystQuery(viewer, dataManager, args = {}) {
     && (result.coverage?.layersQueried || [])
       .some((l) => VIEWPORT_LOADED_LAYERS.has(l.layerKey));
   if (viewportScoped && result.coverage) {
-    result.coverage.note = `${result.coverage.note} — counts cover loaded data; the flights layer loads by viewport`;
+    result.coverage.note = `${result.coverage.note}. Числа учитывают загруженные данные; слой полётов загружается по области просмотра`;
   }
   // ENTITY-CENTRED NEARBY: answered by the SAME engine that fills the Contacts
   // panel, so the spoken number and the panel readout for one centre cannot
@@ -3427,10 +3685,10 @@ async function runAnalystQuery(viewer, dataManager, args = {}) {
   const windowAircraft = Number.isFinite(contactsWindow?.aircraft) ? contactsWindow.aircraft : null;
   const proximityScoped = scopeKind === 'radius' || scopeKind === 'view';
   const countsReconciliation = (contactsWindow && aircraftQueried && proximityScoped && windowAircraft !== null)
-    ? `Contacts is ACTIVE: its window holds ${windowAircraft} aircraft within `
-      + `${contactsWindow.radiusKm} km of ${contactsWindow.centeredOn}, and that is the answer to a bare `
-      + `"how many aircraft are nearby". This query measured something else — ${result.count} ${result.scopeLabel}. `
-      + 'Give this one only if the operator asked about that specific area, and name both scopes if you give both.'
+    ? `Контакты активны: в окне показано ${windowAircraft} самолётов в радиусе `
+      + `${contactsWindow.radiusKm} км от ${contactsWindow.centeredOn}. Именно это число отвечает на общий вопрос `
+      + `о ближайших самолётах. Этот запрос измерил другую область: ${result.count}, ${result.scopeLabel}. `
+      + 'Используйте это число только для вопроса об указанной области; если называете оба числа, укажите обе области.'
     : null;
   return {
     ok: true,

@@ -1,0 +1,99 @@
+# Установка Fikra Monitor
+
+[English](setup.en.md) · [Главная](../README.md)
+
+Инструкция для локального запуска [Fikra Monitor](https://github.com/fikra-labs-official/fikra-monitor). Не используйте для этого [fikra-global-monitor](https://github.com/fikra-labs-official/fikra-global-monitor): это другой проект.
+
+## 1. Подготовьте систему
+
+Установите [Git](https://git-scm.com/downloads) и [Node.js](https://nodejs.org/en/download) 24.14+ из серии 24 LTS. Поддерживаемые версии точно указаны в `package.json`; Node 25 не подходит под заявленный диапазон. Проверьте:
+
+```bash
+node --version
+npm --version
+git --version
+```
+
+Нужен современный браузер с WebGL и доступ к интернету для живых источников. Микрофон требуется только для голоса.
+
+## 2. Получите проект и запустите
+
+На macOS/Linux в Terminal:
+
+```bash
+git clone https://github.com/fikra-labs-official/fikra-monitor.git
+cd fikra-monitor
+npm ci
+npm run doctor
+npm run dev
+```
+
+На Windows в PowerShell:
+
+```powershell
+git clone https://github.com/fikra-labs-official/fikra-monitor.git
+Set-Location fikra-monitor
+npm ci
+npm run doctor
+npm run dev
+```
+
+Если папка уже есть, пропустите `git clone` и перейдите в неё. Если `.env` уже существует, **не заменяйте его**: он может содержать ваши ключи. `npm ci` устанавливает версии из `package-lock.json`; это не регистрация и не платный API-вызов. `npm run doctor` проверяет локальную настройку. Откройте [http://127.0.0.1:4173](http://127.0.0.1:4173). Для остановки нажмите `Ctrl+C` в терминале. Для повторного запуска выполните `npm run dev` из папки проекта.
+
+Без ключей приложение должно стартовать на карте без Google 3D. Подключение Google, Cesium или OpenAI необязательно для первого знакомства. Сервер слушает только `127.0.0.1:4173` по умолчанию; API также проверяет loopback-адрес, локальный Host и Origin запроса. Режим LAN в этом форке не поддерживается.
+
+## 3. Ключи и аккаунты
+
+В dev-версии нажмите **POWER UP** справа внизу. В панели Provider Settings ссылка **GET KEY** открывает регистрацию у провайдера; вставьте полученный ключ и нажмите **SAVE**. Панель сохранит его в локальном `.env` и перезапустит сервер. При запуске через Pinokio она использует `pinokio/ENVIRONMENT` вместо `.env`. Ключи из shell/Keychain отмечаются как внешние и доступны для изменения только там, где их задали. В `npm run preview` панель недоступна.
+
+Если предпочитаете ручную настройку, создайте `.env` по `.env.example`, только если файла ещё нет. На macOS/Linux: `cp -n .env.example .env`; в PowerShell: `if (-not (Test-Path .env)) { Copy-Item .env.example .env }`. Откройте **только локальный** `.env` в редакторе, вписывайте значение после `=` без кавычек и не публикуйте файл. После изменения вручную перезапустите `npm run dev`. Все поля ключей в `.env.example` пустые; ненужные интеграции оставляйте пустыми. Тарифы, квоты и условия меняются: проверяйте текущую страницу провайдера перед подключением.
+
+| Переменная | Для чего | Где получить |
+|---|---|---|
+| `GOOGLE_MAPS_API_KEY` | Браузерные Photorealistic 3D Tiles | [Google Cloud / Map Tiles API](https://developers.google.com/maps/documentation/tile/get-api-key). Создайте проект, подключите оплату, включите Map Tiles API и создайте браузерный ключ. |
+| `GOOGLE_MAPS_SERVER_API_KEY` | Серверные поиск мест, геокодирование и резервные Street View снимки | Создайте **отдельный** ключ в Google Cloud и добавьте его через GOOGLE MAPS SERVER в панели или вручную в `.env`; включите [Places API (New)](https://developers.google.com/maps/documentation/places/web-service/get-api-key), [Geocoding API](https://developers.google.com/maps/documentation/geocoding/cloud-setup) и при необходимости [Street View Static API](https://developers.google.com/maps/documentation/streetview/cloud-setup). |
+| `CESIUM_ION_TOKEN` | Дополнительные наборы изображений и рельефа, включая доступные через ion 3D-активы | [Cesium ion / access tokens](https://cesium.com/learn/ion/cesium-ion-access-tokens/). Создайте отдельный публичный `assets:read` токен для приложения и проверьте условия выбранного тарифа. |
+| `OPENAI_API_KEY` | Голос и AI HUD | [OpenAI Platform / API keys](https://platform.openai.com/api-keys). API-оплата и лимиты [отдельны от ChatGPT](https://openai.com/api/pricing/). |
+| `FIRMS_MAP_KEY` | Живые очаги пожаров NASA FIRMS | [FIRMS MAP_KEY](https://firms.modaps.eosdis.nasa.gov/api/map_key/). Нужен именно `MAP_KEY` API, не ссылка на скачанный архив CSV. |
+| `AISSTREAM_API_KEY` | Живые суда | [AISStream](https://aisstream.io/documentation). Зарегистрируйте аккаунт и создайте API key. |
+| `TOMTOM_API_KEY` | Реальный дорожный поток вместо обозначенной симуляции | [TomTom Developer](https://developer.tomtom.com/how-to-get-tomtom-api-key). Проверьте актуальную квоту и доступность Traffic Flow для вашего плана. |
+| `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET` | Аутентифицированные запросы к OpenSky | [OpenSky Network](https://opensky-network.org/) и [REST API authentication](https://openskynetwork.github.io/opensky-api/rest.html#authentication). Без пары ключей задайте `OPENSKY_AUTH_MODE=anon`; после добавления обоих ключей переключите на `OPENSKY_AUTH_MODE=oauth`. |
+| `LL2_API_TOKEN` | Повышенный лимит Launch Library 2 | [The Space Devs / Launch Library 2](https://thespacedevs.com/llapi). Базовые данные запусков доступны без токена. |
+| `TFL_APP_KEY` | Повышенный лимит камер TfL | [TfL API portal](https://api-portal.tfl.gov.uk/). Базовый доступ к публичным данным возможен без ключа. |
+
+Ограничьте браузерный Google ключ по разрешённым адресам и **только Map Tiles API**. Для локальной работы учтите `http://127.0.0.1:4173`; браузерный ключ может быть виден в devtools. `CESIUM_ION_TOKEN` тоже виден пользователю браузера: примените ограничения URL и `assets:read`. `GOOGLE_MAPS_SERVER_API_KEY` и остальные приватные ключи не должны попадать в браузер, скриншоты, журналы или Git. Серверный ключ ограничьте списком API; ограничение по IP применяйте только при стабильном исходящем IP. Если отдельный серверный ключ не задан, код ради совместимости может использовать браузерный Google ключ, но рекомендованная схема — два ключа с разными ограничениями.
+
+Для Google и OpenAI задайте [Google Cloud budget alerts/quotas](https://cloud.google.com/billing/docs/how-to/budgets) и [лимиты OpenAI](https://platform.openai.com/settings/organization/limits). Оповещение о бюджете само по себе **не останавливает расходы**; перепроверьте действующие инструменты ограничения у провайдеров. Локальные ограничители приложения тоже не являются жёстким биллинговым пределом.
+
+## Голос: GPT-Live 1 и GPT-5.6 Terra
+
+Используется тот же `OPENAI_API_KEY`. По умолчанию `OPENAI_VOICE_ENGINE=live`: **GPT-Live 1** ведёт разговор по-русски, а **GPT-5.6 Terra** выполняет команды карты, поиск и задачи, требующие рассуждений. Настроен мужской голос `meridian`. Расшифровка вашей речи на экран не выводится. Короткая сводка HUD остаётся отдельной задачей `OPENAI_HUD_SUMMARY_MODEL`.
+
+После изменения `.env` перезапустите сервер и обновите страницу. На голосовой кнопке должна быть метка **LIVE**. Нажмите микрофон, разрешите доступ и попробуйте: «Перенеси меня в Стамбул», затем «Найди мечети в Тиране» или «Очертить границу Андалусии, Испания». Результат зависит от доступности географических источников; новая модель не добавляет отсутствующие у провайдера границы или 3D-покрытие.
+
+Повторное нажатие микрофона завершает сессию. Браузер автоматически закрывает её через 10 минут (`OPENAI_LIVE_MAX_SESSION_SECONDS`, 60–600 секунд). При разрыве связи приложение не подключается заново само. Это защитные меры приложения, **не жёсткий лимит счёта OpenAI**; при сбое браузера финальный расход может остаться неподтверждённым.
+
+По [тарифам OpenAI](https://developers.openai.com/api/docs/pricing) на 13 сентября 2026 года Live стоит **$0,05 за минуту открытой сессии**, включая тишину. Создание WebRTC-сессии имеет минимальную оплату 15 секунд, которая засчитывается в её длительность. Terra оплачивается отдельно по токенам. Поэтому 10 минут голоса стоят примерно $0,50 **плюс Terra и запросы других провайдеров**. Счётчик в приложении является оценкой, а не выпиской из биллинга. Платная голосовая сессия не создаётся до нажатия микрофона.
+
+Для возврата к прежнему движку установите `OPENAI_VOICE_ENGINE=realtime`, перезапустите сервер и обновите страницу. Старые настройки `OPENAI_REALTIME_MODEL`, `OPENAI_REALTIME_MODEL_MINI` и `OPENAI_REALTIME_VOICE` сохранены; переключатель MINI относится только к этому резервному режиму. Автоматической подмены недоступных моделей нет.
+
+Схема подключения: [GPT-Live и делегирование](https://developers.openai.com/api/docs/guides/live-delegation), [GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra).
+
+## 4. Проверка и неполадки
+
+```bash
+npm run build
+npm test
+npm run check:publication
+```
+
+Затем `npm run preview` показывает собранную версию локально; прекратите его `Ctrl+C`. Проверка публикации смотрит **текущее рабочее дерево и индекс**, но **не гарантирует** отсутствие секретов в прежней истории Git. Команды не проверяют доступность внешних сервисов, свежесть данных, голос на вашем микрофоне и все действия браузера.
+
+- `node` не найден или версия не подходит: установите поддерживаемый Node, откройте новый терминал и проверьте `node --version`.
+- `npm ci` завершился ошибкой: проверьте интернет, Node и целостность `package-lock.json`. Не удаляйте свой `.env` и не запускайте автоматическое исправление зависимостей без понимания последствий.
+- Порт 4173 занят: остановите другой процесс на порту или используйте другой loopback-порт, например `npm run dev -- --host 127.0.0.1 --port 4174`, затем откройте `http://127.0.0.1:4174`.
+- Пустой/плоский глобус: проверьте WebGL, интернет и ошибки браузера; Google 3D требует включённый Map Tiles API и действительный ключ, но базовые карты могут работать без него.
+- `KEY REQUIRED`, `UNAVAILABLE`, мало самолётов/судов/камер: проверьте соответствующий ключ, статус и территориальное покрытие источника. Отсутствие данных не означает отсутствие объектов в реальности.
+- Голос недоступен: проверьте `OPENAI_API_KEY`, оплату API, разрешение микрофона и локальный адрес. Подписка ChatGPT не даёт автоматически API-кредиты.
+
+Сервер намеренно доступен только с этого компьютера. **Не задавайте `HOST=0.0.0.0` и не публикуйте dev/preview-сервер в интернете**: LAN/публичный режим здесь не поддерживается. См. [SECURITY.md](../SECURITY.md). Сохраняйте атрибуцию в интерфейсе; условия данных и моделей отличаются от MIT-кода: [DATA_SOURCES.md](../DATA_SOURCES.md), [LICENSE](../LICENSE).

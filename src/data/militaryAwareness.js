@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { t } from '../i18n/index.js';
 import flightsLayer from './flights.js';
 import militaryFlightsLayer from './militaryFlights.js';
 import aisLiveVesselsLayer from './aisLiveVessels.js';
@@ -258,8 +259,8 @@ function ensurePanel() {
 function hidePanel() {
   if (state.panel) {
     const markup = `<div class="military-awareness-standby">
-      <strong>${state.enabled ? 'CONTEXT READY' : 'GLOBAL CONTEXT OFF'}</strong>
-      <span>${state.enabled ? 'SELECT A FLIGHT, VESSEL, OR MAPPED INSTALLATION' : 'ENABLE TO LOAD OBSERVED / MAPPED PROXIMITY'}</span>
+      <strong>${state.enabled ? 'КОНТЕКСТ ГОТОВ' : 'ГЛОБАЛЬНЫЙ КОНТЕКСТ ВЫКЛЮЧЕН'}</strong>
+      <span>${state.enabled ? 'ВЫБЕРИТЕ САМОЛЕТ, СУДНО ИЛИ ОБЪЕКТ НА КАРТЕ' : 'ВКЛЮЧИТЕ, ЧТОБЫ ЗАГРУЗИТЬ ОБЪЕКТЫ ПО НАБЛЮДЕНИЯМ И КАРТАМ'}</span>
     </div>`;
     state.panel.hidden = false;
     if (state.panelMarkup !== markup) {
@@ -352,8 +353,8 @@ export function summarizeInstallationViewport(items, source) {
   return {
     ...summary,
     reason: summary.count
-      ? 'mapped matches from the loaded viewport'
-      : 'viewport feed is not a complete 250 km survey',
+      ? 'совпадения на карте из загруженной области экрана'
+      : 'данные экрана не являются полным обзором радиуса 250 км',
   };
 }
 
@@ -490,14 +491,14 @@ function evaluateSubject(subject, sourceStates = collectSourceStates()) {
     evaluatedAt: Date.now(),
     radiusM: AWARENESS_RADIUS_M,
     cohorts: [
-      { id: 'flights', label: 'Flights', source: flightsState.stats.source || SOURCE_LABEL.flights, summary: summarizeAwarenessCohortForNavigation(flights, flightsState) },
-      { id: 'military', label: 'Military flights', source: militaryState.stats.source || SOURCE_LABEL.military, summary: summarizeAwarenessCohortForNavigation(military, militaryState) },
-      { id: 'ais-live-vessels', label: 'AIS vessels', source: vesselsState.stats.source || SOURCE_LABEL['ais-live-vessels'], summary: summarizeAwarenessCohortForNavigation(vessels, vesselsState) },
+      { id: 'flights', label: 'Рейсы', source: flightsState.stats.source || SOURCE_LABEL.flights, summary: summarizeAwarenessCohortForNavigation(flights, flightsState) },
+      { id: 'military', label: 'Военные рейсы', source: militaryState.stats.source || SOURCE_LABEL.military, summary: summarizeAwarenessCohortForNavigation(military, militaryState) },
+      { id: 'ais-live-vessels', label: 'Суда AIS', source: vesselsState.stats.source || SOURCE_LABEL['ais-live-vessels'], summary: summarizeAwarenessCohortForNavigation(vessels, vesselsState) },
       {
         id: 'military-installations',
-        label: 'Mapped installations',
+        label: 'Объекты на карте',
         source: installationsState.stats.source || SOURCE_LABEL['military-installations'],
-        coverage: 'CURRENT VIEWPORT ONLY',
+        coverage: 'ТОЛЬКО ТЕКУЩАЯ ОБЛАСТЬ ЭКРАНА',
         summary: summarizeInstallationViewport(installations, installationsState),
       },
     ],
@@ -512,10 +513,10 @@ function rowHtml(cohort) {
     const label = formatAwarenessLabel(item);
     const targetId = item.icao24 || item.mmsi || item.id;
     if (!targetId) {
-      return `<li><span class="military-awareness-target unavailable" aria-label="Unavailable">${escapeHtml(label)} <span>${formatAwarenessDistance(item.distanceM)}</span></span></li>`;
+      return `<li><span class="military-awareness-target unavailable" aria-label="Недоступно">${escapeHtml(label)} <span>${formatAwarenessDistance(item.distanceM)}</span></span></li>`;
     }
-    const accessibleLabel = label === '—' ? 'Unavailable' : label;
-    return `<li><button type="button" class="military-awareness-target" data-awareness-layer="${escapeHtml(cohort.id)}" data-awareness-id="${escapeHtml(targetId)}" aria-label="Focus ${escapeHtml(accessibleLabel)}">${escapeHtml(label)} <span>${formatAwarenessDistance(item.distanceM)}</span></button></li>`;
+    const accessibleLabel = label === '—' ? 'Недоступно' : label;
+    return `<li><button type="button" class="military-awareness-target" data-awareness-layer="${escapeHtml(cohort.id)}" data-awareness-id="${escapeHtml(targetId)}" aria-label="Перейти к ${escapeHtml(accessibleLabel)}">${escapeHtml(label)} <span>${formatAwarenessDistance(item.distanceM)}</span></button></li>`;
   }).join('');
   const pageCount = Math.max(1, Math.ceil(summary.nearest.length / AWARENESS_PAGE_SIZE));
   const pageLabel = pageCount > 1 ? ` · ${Math.floor(page / AWARENESS_PAGE_SIZE) + 1}/${pageCount}` : '';
@@ -965,10 +966,10 @@ export function findCompatibleHistoryIndex(history, startIndex, direction, {
 
 function navigationControlsHtml() {
   const canPrevious = state.navigationIndex > 0;
-  return `<div class="military-awareness-controls" role="group" aria-label="Global Context navigation">
-    <button type="button" data-awareness-action="previous" title="Previous — prior visited contact in the 250 km window"${canPrevious ? '' : ' disabled'}>PREVIOUS</button>
-    <button type="button" data-awareness-action="focus">FOCUS</button>
-    <button type="button" data-awareness-action="next" title="Next — nearest unvisited contact in the 250 km window"${canNavigateNext() ? '' : ' disabled'}>NEXT</button>
+  return `<div class="military-awareness-controls" role="group" aria-label="Навигация по глобальному контексту">
+    <button type="button" data-awareness-action="previous" title="Предыдущий посещенный объект в окне 250 км"${canPrevious ? '' : ' disabled'}>НАЗАД</button>
+    <button type="button" data-awareness-action="focus">ПЕРЕЙТИ</button>
+    <button type="button" data-awareness-action="next" title="Ближайший непосещенный объект в окне 250 км"${canNavigateNext() ? '' : ' disabled'}>ДАЛЕЕ</button>
   </div>`;
 }
 
@@ -988,10 +989,10 @@ function renderResults() {
   if (!state.enabled || !state.results) return hidePanel();
   const panel = ensurePanel();
   const { subject, cohorts } = state.results;
-  const markup = `<div class="military-awareness-subject">${escapeHtml(subject.label)} · ${formatAwarenessDistance(AWARENESS_RADIUS_M)} FLIGHT / VESSEL WINDOW</div>
+  const markup = `<div class="military-awareness-subject">${escapeHtml(subject.label)} · ОКНО РЕЙСОВ / СУДОВ ${formatAwarenessDistance(AWARENESS_RADIUS_M)}</div>
     ${navigationControlsHtml()}
     ${cohorts.map(rowHtml).join('')}
-    <p class="military-awareness-note">Open-source mapped/observed context. Missing broadcasts, unloaded map areas, or unmapped sites are not evidence of absence.</p>`;
+    <p class="military-awareness-note">Контекст из открытых карт и наблюдений. Отсутствие сигнала, незагруженные области карты или ненанесенные объекты не доказывают их отсутствие.</p>`;
   panel.hidden = false;
   if (state.panelMarkup !== markup) {
     panel.innerHTML = markup;
@@ -1031,11 +1032,14 @@ function ensureDirectionOverlay() {
   const compass = document.createElement('div');
   compass.className = 'military-awareness-compass-ring';
   const cardinals = [
-    ['N', 0], ['E', 90], ['S', 180], ['W', 270],
+    ['north', 'С', 0],
+    ['east', 'В', 90],
+    ['south', 'Ю', 180],
+    ['west', 'З', 270],
   ];
-  state.compassLabels = cardinals.map(([label, bearing]) => {
+  state.compassLabels = cardinals.map(([className, label, bearing]) => {
     const element = document.createElement('span');
-    element.className = `military-awareness-compass-label cardinal-${label.toLowerCase()}`;
+    element.className = `military-awareness-compass-label cardinal-${className}`;
     element.textContent = label;
     element.dataset.bearing = String(bearing);
     root.appendChild(element);
@@ -1113,7 +1117,7 @@ function updateDirectionOverlay() {
   const cameraHeading = state.viewer.camera.heading || 0;
   const headingDeg = (Math.round(Cesium.Math.toDegrees(cameraHeading)) + 360) % 360;
   state.compassRing.style.setProperty('--compass-rotation', `${-headingDeg}deg`);
-  state.compassHeading.textContent = `HDG ${String(headingDeg).padStart(3, '0')}°`;
+  state.compassHeading.textContent = `КУРС ${String(headingDeg).padStart(3, '0')}°`;
   state.compassHeading.style.left = `${geometry.centerX}px`;
   state.compassHeading.style.top = `${geometry.centerY - compassRadius + 39}px`;
   for (const label of state.compassLabels) {
@@ -1167,8 +1171,8 @@ function updateDirectionOverlay() {
         Cesium.Math.toDegrees(targetCartographic.longitude),
       )
       : null;
-    const bearingText = Number.isFinite(bearing) ? `BRG ${String(Math.round(bearing)).padStart(3, '0')}°` : 'BRG —';
-    const courseText = Number.isFinite(item.track) ? ` · CRS ${String(Math.round(item.track)).padStart(3, '0')}°` : '';
+    const bearingText = Number.isFinite(bearing) ? `ПЕЛ ${String(Math.round(bearing)).padStart(3, '0')}°` : 'ПЕЛ —';
+    const courseText = Number.isFinite(item.track) ? ` · КУРС ${String(Math.round(item.track)).padStart(3, '0')}°` : '';
     marker._label.textContent = `${label} · ${formatAwarenessDistance(item.distanceM)}\n${bearingText}${courseText}`;
     marker.hidden = false;
   }
@@ -1717,9 +1721,9 @@ function focusAttentionTarget() {
 
 const militaryAwarenessLayer = {
   id: 'military-awareness',
-  name: 'Global Context',
+  name: t('data.layer.globalContext'),
   icon: '◎',
-  source: 'Open-source proximity context',
+  source: 'Контекст близости из открытых источников',
   // Context is entered from its dedicated right rail, not as a raw layer.
   showInTogglePanel: false,
   updateInterval: 0,

@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { t } from '../i18n/index.js';
 import {
   registerEntityContext,
   selectEntityContext,
@@ -58,7 +59,7 @@ const DEFAULT_ACTIVE_LABELS = 900;
 const REFRESH_MS = 60000;
 /** Bounded wait for the first accepted vessel position in one enabled session. */
 export const AIS_FIRST_CONNECT_GRACE_MS = 30000;
-const AIS_FIRST_CONNECT_LABEL = 'awaiting first AIS position…';
+const AIS_FIRST_CONNECT_LABEL = 'ожидание первой позиции AIS...';
 const VISIBILITY_UPDATE_MS = 800;
 /** Focus alpha alone samples faster inside the existing preRender pass. */
 const FOCUS_UPDATE_MS = 80;
@@ -109,12 +110,12 @@ let _aisSessionSequence = 0;
  * "just now · 0 vessels".
  */
 const AIS_STATUS_REASON = {
-  'missing-key': 'AISSTREAM_API_KEY not set',
-  unsupported: 'live feed unsupported',
-  connecting: 'connecting to feed…',
-  closed: 'feed disconnected',
-  error: 'feed down',
-  idle: 'feed idle',
+  'missing-key': 'AISSTREAM_API_KEY не задан',
+  unsupported: 'прямой поток не поддерживается',
+  connecting: 'подключение к потоку...',
+  closed: 'поток отключен',
+  error: 'поток недоступен',
+  idle: 'поток ожидает данных',
 };
 
 /**
@@ -155,19 +156,19 @@ function describeDegradedAisFeed(status, payload) {
   if (status === 'auth-failed') {
     // Actionable, not a countdown: retrying cannot fix a rejected credential,
     // so the chip asks the operator to do the one thing that can.
-    return 'API key rejected — check AISSTREAM_API_KEY';
+    return 'Ключ API отклонен. Проверьте AISSTREAM_API_KEY';
   }
   if (status === 'stale') {
     const silentSec = Math.round(Number(payload?.silentForMs) / 1000);
     return Number.isFinite(silentSec) && silentSec > 0
-      ? `feed silent ${silentSec}s — no AIS data`
-      : 'feed silent — no AIS data';
+      ? `нет данных AIS ${silentSec} с`
+      : 'нет данных AIS';
   }
   const attempt = Number(payload?.reconnectAttempt);
-  const suffix = Number.isFinite(attempt) && attempt >= 1 ? ` (attempt ${attempt})` : '';
+  const suffix = Number.isFinite(attempt) && attempt >= 1 ? ` (попытка ${attempt})` : '';
   return status === 'down'
-    ? `feed down — retrying slowly${suffix}`
-    : `reconnecting to feed…${suffix}`;
+    ? `поток недоступен, повторная попытка позже${suffix}`
+    : `повторное подключение к потоку...${suffix}`;
 }
 
 /**
@@ -190,12 +191,12 @@ export function deriveAisFeedError(payload, acceptedRowCount) {
   if (acceptedRowCount > 0) return null; // accepted rows may be stale while reconnecting, but remain usable
   if (AIS_HEALTHY_STATUSES.has(status)) {
     return payload?.lastMessageAt
-      ? 'awaiting usable AIS positions…'
-      : 'awaiting first AIS message…';
+      ? 'ожидание корректных позиций AIS...'
+      : 'ожидание первого сообщения AIS...';
   }
   if (!status) return null;
   const detail = typeof payload.error === 'string' && payload.error.trim() ? payload.error.trim() : '';
-  const reason = AIS_STATUS_REASON[status] || 'feed unavailable';
+  const reason = AIS_STATUS_REASON[status] || 'поток недоступен';
   return detail && !AIS_STATUS_REASON[status] ? `${reason} (${detail})` : reason;
 }
 
@@ -225,7 +226,7 @@ export function classifyAisFeedSnapshot(payload) {
     rawRowCount: rawRows.length,
     acceptedRowCount,
     error: deriveAisFeedError(payload, acceptedRowCount)
-      || (acceptedRowCount === 0 ? 'awaiting usable AIS positions…' : null),
+      || (acceptedRowCount === 0 ? 'ожидание корректных позиций AIS...' : null),
   };
 }
 
@@ -337,7 +338,7 @@ const shipIconCache = new Map();
 
 const aisLiveVesselsLayer = {
   id: 'ais-live-vessels',
-  name: 'Live AIS Vessels',
+  name: t('data.layer.ais'),
   icon: '◭',
   source: 'AISStream',
   updateInterval: REFRESH_MS,
@@ -809,8 +810,8 @@ function scheduleFirstConnectExpiry(sessionId, delayMs) {
     state.firstConnectPhase = 'unavailable';
     state.loadingLabel = '';
     state.error = state.lastMessageAt
-      ? 'awaiting usable AIS positions…'
-      : 'awaiting first AIS message…';
+      ? 'ожидание корректных позиций AIS...'
+      : 'ожидание первого сообщения AIS...';
     state.stale = state.count > 0;
   }, delayMs);
 }
@@ -831,14 +832,14 @@ function isDefinitiveTransportFailure(status) {
 
 function markAisUnavailable(reason) {
   settleFirstConnectPhase('unavailable');
-  state.error = reason || 'AIS live load failed';
+  state.error = reason || 'не удалось загрузить данные AIS';
   state.stale = state.count > 0;
 }
 
 async function loadLivePositions(viewer) {
   if (!viewer || state.loading) return;
   state.loading = true;
-  state.loadingLabel = state.loaded ? 'refreshing...' : 'loading...';
+  state.loadingLabel = state.loaded ? t('data.common.refreshing') : t('data.common.loading');
   const requestController = new AbortController();
   const requestSessionId = state.sessionId;
   state.abort = requestController;
@@ -873,7 +874,7 @@ async function loadLivePositions(viewer) {
     applyAisFeedSnapshot(viewer, payload);
   } catch (error) {
     if (ownsAisRequest(requestController, requestSessionId) && error?.name !== 'AbortError') {
-      markAisUnavailable(error?.message || 'AIS live load failed');
+      markAisUnavailable(error?.message || 'не удалось загрузить данные AIS');
       console.warn('[Data:ais-live-vessels]', state.error, error);
     }
   } finally {
@@ -1419,7 +1420,7 @@ function publishVesselOverlayEntries(entries) {
         : '';
       return {
         ...card,
-        accessibilityLabel: `Focus vessel ${card.title}, MMSI ${mmsi}`,
+        accessibilityLabel: `Перейти к судну ${card.title}, MMSI ${mmsi}`,
         activate: () => {
           const record = state.vesselMap.get(mmsi);
           if (!record) return false;
@@ -1734,7 +1735,7 @@ function registerSelectedContext(record) {
     return registerEntityContext(record, {
       id: `ais-${record.mmsi}`,
       layerId: 'ais-live-vessels',
-      layerName: 'Live AIS Vessels',
+      layerName: t('data.layer.ais'),
       source: 'AISStream',
       label: displayVesselName(record),
       latitude: record.lat,
@@ -1790,8 +1791,8 @@ function updateSelectedVesselHud(record) {
   el.classList.add('active');
   el.textContent = [
     `AIS: ${trimHudValue(record.name, 32)}`,
-    `${trimHudValue(record.type || 'VESSEL', 24)}  SPD: ${formatSpeed(record.speed)}  HDG: ${formatHeading(record.heading ?? record.course)}`,
-    `MMSI: ${record.mmsi || '--'}  ${formatPositionTime(record)}${stale ? '  · STALE' : ''}`,
+    `${trimHudValue(record.type || 'СУДНО', 24)}  СКОР: ${formatSpeed(record.speed)}  КУРС: ${formatHeading(record.heading ?? record.course)}`,
+    `MMSI: ${record.mmsi || '--'}  ${formatPositionTime(record)}${stale ? '  · УСТАРЕЛО' : ''}`,
   ].join('\n');
 }
 
@@ -1846,14 +1847,14 @@ export function buildVesselCard(record) {
 export function buildSelectedVesselCard(record) {
   const direction = record.heading ?? record.course;
   const details = [[
-    vesselTypeShort(record) || 'VESSEL',
+    vesselTypeShort(record) || 'СУДНО',
     formatSpeed(record.speed),
     Number.isFinite(direction) ? `${Math.round(direction)}°` : '--°',
   ].join(' · ')];
   const destination = String(record.destination || '').trim();
   if (destination) details.push(`→ ${trimHudValue(destination, 24)}`);
   const stale = (record.missedRefreshes || 0) > 0;
-  details.push(`MMSI ${record.mmsi || '--'} · ${formatPositionTime(record)}${stale ? ' · STALE' : ''}`);
+  details.push(`MMSI ${record.mmsi || '--'} · ${formatPositionTime(record)}${stale ? ' · УСТАРЕЛО' : ''}`);
   return {
     id: vesselOverlayEntryId(record),
     actionable: Boolean(record?.mmsi),
@@ -1904,22 +1905,22 @@ export function cardScreenSeparated(accepted, screen, minSepPx) {
 function displayVesselName(record) {
   const name = String(record.name || '').trim();
   if (name && name !== 'VESSEL' && name !== record.mmsi) return name;
-  return record.mmsi ? `MMSI ${record.mmsi}` : 'VESSEL';
+  return record.mmsi ? `MMSI ${record.mmsi}` : 'СУДНО';
 }
 
 function formatSpeed(speed) {
-  return speed === null ? '--KT' : `${speed.toFixed(1)}KT`;
+  return speed === null ? '-- уз' : `${speed.toFixed(1)} уз`;
 }
 
 function formatHeading(heading) {
-  return Number.isFinite(heading) ? `${Math.round(heading)}DEG` : '--DEG';
+  return Number.isFinite(heading) ? `${Math.round(heading)}°` : '--°';
 }
 
 function formatPositionTime(record) {
-  if (!record.lastPositionUtc) return 'POS: LIVE';
+  if (!record.lastPositionUtc) return 'ПОЗ: СЕЙЧАС';
   const date = new Date(record.lastPositionUtc);
-  if (Number.isNaN(date.getTime())) return 'POS: LIVE';
-  return `POS: ${date.toISOString().slice(11, 19)}Z`;
+  if (Number.isNaN(date.getTime())) return 'ПОЗ: СЕЙЧАС';
+  return `ПОЗ: ${date.toISOString().slice(11, 19)}Z`;
 }
 
 function setVisible(show) {

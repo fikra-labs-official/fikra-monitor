@@ -32,8 +32,8 @@ test('selected bikeshare entry preserves source copy and protected-lane policy',
   assert.equal(entry.position, record.point.position);
   assert.equal(entry.title, 'Congress & 6th');
   assert.deepEqual(entry.details, [
-    '🚲 7 avail · 4 docks · 11 cap',
-    '⚠️ Not renting',
+    '🚲 7 вел. · 4 места из 11',
+    '⚠️ Выдача недоступна',
   ]);
   assert.equal(entry.variant, 'selected');
   assert.equal(entry.selected, true);
@@ -42,6 +42,16 @@ test('selected bikeshare entry preserves source copy and protected-lane policy',
   assert.equal(entry.collisionGroup, 'ambient-card');
   assert.equal(entry.edgeFade, 'keyhole');
   assert.equal(entry.horizonCull, true);
+});
+
+test('selected bikeshare counts keep bikes, free docks, and capacity distinct in Russian', () => {
+  const record = makeRecord();
+  record.docksAvailable = 1;
+  assert.equal(createBikeshareSelectedOverlayEntry('station', record).details[0],
+    '🚲 7 вел. · 1 место из 11');
+  record.docksAvailable = 5;
+  assert.equal(createBikeshareSelectedOverlayEntry('station', record).details[0],
+    '🚲 7 вел. · 5 мест из 11');
 });
 
 test('real station select/clear path publishes one card and creates no native label graphic', () => {

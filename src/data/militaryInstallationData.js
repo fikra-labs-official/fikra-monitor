@@ -23,10 +23,10 @@ const CLASS_BY_MILITARY_TAG = {
  * attribution and the details panel read it.
  */
 const LABEL_BY_CLASS = {
-  airfield: 'Military airfield',
-  naval_base: 'Naval base',
-  range: 'Firing range',
-  military_land: 'Military land',
+  airfield: 'Военный аэродром',
+  naval_base: 'Военно-морская база',
+  range: 'Полигон',
+  military_land: 'Военная территория',
 };
 
 const MAX_FOOTPRINT_POINTS = 400;
@@ -39,8 +39,7 @@ const MAX_FOOTPRINT_POINTS = 400;
 export function humanizeInstallationClass(klass) {
   const key = String(klass || '').trim().toLowerCase();
   if (LABEL_BY_CLASS[key]) return LABEL_BY_CLASS[key];
-  const words = key.replaceAll('_', ' ').trim();
-  return words ? `${words[0].toUpperCase()}${words.slice(1)}` : 'Mapped installation';
+  return 'Объект на карте';
 }
 
 function finiteLatitude(value) {
@@ -103,7 +102,7 @@ export function normalizeMilitaryInstallations(payload, retrievedAt = new Date()
       // geometry, while a footprint-less way/relation has unknown extent.
       osmType: type,
       class: klass,
-      name: String(tags.name || tags['name:en'] || '').trim() || humanizeInstallationClass(klass),
+      name: String(tags['name:ru'] || tags.name || tags['name:en'] || '').trim() || humanizeInstallationClass(klass),
       ...point,
       footprint: footprintFrom(element),
       sources: [{ name: 'OpenStreetMap', id: `${type}/${osmId}`, retrievedAt }],

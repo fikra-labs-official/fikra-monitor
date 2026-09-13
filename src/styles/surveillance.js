@@ -12,10 +12,10 @@
 export const nightVisionShader = {
   name: 'surveillance',
   uniforms: {
-    gain: { default: 0.55, min: 0, max: 1, label: 'Gain' },
-    bloom: { default: 0.30, min: 0, max: 1, label: 'Bloom' },
-    scanlineStr: { default: 1.0, min: 0, max: 1, label: 'Scanlines' },
-    pixelation: { default: 2.5, min: 1, max: 6, label: 'Pixelation' },
+    gain: { default: 0.55, min: 0, max: 1, label: 'Усиление' },
+    bloom: { default: 0.30, min: 0, max: 1, label: 'Свечение' },
+    scanlineStr: { default: 1.0, min: 0, max: 1, label: 'Строки развёртки' },
+    pixelation: { default: 2.5, min: 1, max: 6, label: 'Пикселизация' },
   },
   fragmentShader: /* glsl */ `
     uniform sampler2D colorTexture;

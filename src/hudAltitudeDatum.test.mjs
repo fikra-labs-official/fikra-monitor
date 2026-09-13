@@ -126,12 +126,12 @@ test('the corner ALT readout prints the MSL height, never the ellipsoidal one', 
     'the ALT readout must convert the camera height before printing it',
   );
   assert.equal(
-    has(/`ALT: \$\{Math\.round\(altMslM\)\}m/),
+    has(/`\$\{t\('hud\.altitude'\)\}: \$\{Math\.round\(altMslM\)\}м/),
     true,
     'the #hud-alt line must print altMslM',
   );
   assert.equal(
-    has(/`ALT: \$\{Math\.round\(altM\)\}m/),
+    has(/`\$\{t\('hud\.altitude'\)\}: \$\{Math\.round\(altM\)\}м/),
     false,
     'the #hud-alt line must not regress to the raw ellipsoidal camera height',
   );
@@ -187,8 +187,8 @@ test('a cold tick paints both readouts uncorrected, and resolving flips both in 
 
     // Tick 1 — cold. This is also the tick that requests the grid.
     hud._updateCameraData();
-    assert.match(alt(), /^ALT: -15m/, `cold corner readout, got ${alt()}`);
-    assert.match(summary(), /\| ALT -15M \|/, `cold summary tag, got ${summary()}`);
+    assert.match(alt(), /^ВЫСОТА: -15м/, `cold corner readout, got ${alt()}`);
+    assert.match(summary(), /\| ВЫСОТА -15М \|/, `cold summary tag, got ${summary()}`);
 
     // The HUD registered its own continuation on this same shared promise
     // during tick 1, and it registered first, so awaiting here means its
@@ -198,18 +198,18 @@ test('a cold tick paints both readouts uncorrected, and resolving flips both in 
 
     // Tick 2 — resolved. ONE tick has to move both.
     hud._updateCameraData();
-    assert.match(alt(), /^ALT: 17m/, `corrected corner readout, got ${alt()}`);
+    assert.match(alt(), /^ВЫСОТА: 17м/, `corrected corner readout, got ${alt()}`);
     assert.match(
       summary(),
-      /\| ALT 17M \|/,
+      /\| ВЫСОТА 17М \|/,
       `the summary must repaint in the same tick the corner does, got ${summary()}`,
     );
 
     // Tick 3 — steady state. The repaint is a transition, not a per-tick cost.
     const summaryRevisionAfterFlip = hud._summaryRevision;
     hud._updateCameraData();
-    assert.match(alt(), /^ALT: 17m/);
-    assert.match(summary(), /\| ALT 17M \|/);
+    assert.match(alt(), /^ВЫСОТА: 17м/);
+    assert.match(summary(), /\| ВЫСОТА 17М \|/);
     assert.equal(
       hud._summaryRevision,
       summaryRevisionAfterFlip,
@@ -233,16 +233,16 @@ test('the corrected readouts are the MSL datum, not a coincidence of the SFO sig
   try {
     hud = new IntelHUD(env.viewer);
     hud._updateCameraData(); // cold: requests the grid, paints uncorrected
-    assert.match(env.elements.get('hud-alt').textContent, /^ALT: 100m/);
+    assert.match(env.elements.get('hud-alt').textContent, /^ВЫСОТА: 100м/);
     await ensureGeoidReady();
     await Promise.resolve();
     hud._updateCameraData();
     assert.match(
       env.elements.get('hud-alt').textContent,
-      /^ALT: 54m/,
+      /^ВЫСОТА: 54м/,
       `100 m ellipsoidal over London is 54 m MSL, got ${env.elements.get('hud-alt').textContent}`,
     );
-    assert.match(env.elements.get('hud-summary').textContent, /\| ALT 54M \|/);
+    assert.match(env.elements.get('hud-summary').textContent, /\| ВЫСОТА 54М \|/);
   } finally {
     hud?.destroy();
     env.restore();

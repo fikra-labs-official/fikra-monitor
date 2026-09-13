@@ -5,10 +5,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 PORT="${PORT:-4173}"
-# Local-only by default: the dev server brokers configured API keys, so it
-# should not be reachable from the network unless explicitly requested.
-# Set HOST=0.0.0.0 to opt in to LAN exposure (a warning is printed).
-HOST="${HOST:-localhost}"
+# Only loopback is supported: this server brokers private provider keys.
+HOST="${HOST:-127.0.0.1}"
+case "${HOST}" in
+  localhost|127.0.0.1|::1) ;;
+  *) echo "Only loopback HOST is supported. Use 127.0.0.1." >&2; exit 1 ;;
+esac
 # CCTV source packs (all keyless): Austin (~815 live upstream), Caltrans
 # districts 4,7,11,3 = SF/LA/San Diego/Sacramento (~1,860 live upstream),
 # TfL London JamCams (~870 live upstream). Caps keep the densest cores per
@@ -30,6 +32,7 @@ CCTV_MAX_SOURCES="${CCTV_MAX_SOURCES:-900}"
 # the same value, without misclassifying values that dev-fresh loaded from .env.
 KEY_SETUP_EXTERNAL_KEYS=()
 [[ -n "${GOOGLE_MAPS_API_KEY:-}" ]] && KEY_SETUP_EXTERNAL_KEYS+=(GOOGLE_MAPS_API_KEY)
+[[ -n "${GOOGLE_MAPS_SERVER_API_KEY:-}" ]] && KEY_SETUP_EXTERNAL_KEYS+=(GOOGLE_MAPS_SERVER_API_KEY)
 [[ -n "${CESIUM_ION_TOKEN:-}" ]] && KEY_SETUP_EXTERNAL_KEYS+=(CESIUM_ION_TOKEN)
 [[ -n "${OPENAI_API_KEY:-}" ]] && KEY_SETUP_EXTERNAL_KEYS+=(OPENAI_API_KEY)
 [[ -n "${AISSTREAM_API_KEY:-}" ]] && KEY_SETUP_EXTERNAL_KEYS+=(AISSTREAM_API_KEY)
@@ -230,16 +233,12 @@ if ! grep -q "dataManager.register(cctvLayer)" src/main.js; then
   exit 1
 fi
 
-echo "Stopping all existing God's Eye View dev servers..."
-pkill -f "${ROOT_DIR}/node_modules/.bin/vite" >/dev/null 2>&1 || true
-pkill -f "${ROOT_DIR}/node_modules/vite/bin/vite.js" >/dev/null 2>&1 || true
-
-# Also clear the requested port in case it is held by a stale wrapper or a
-# server started through a different package-manager command.
+# Never kill an unknown process just because it owns our preferred port.
 if command -v lsof >/dev/null 2>&1; then
   PIDS="$(lsof -tiTCP:${PORT} -sTCP:LISTEN 2>/dev/null || true)"
   if [[ -n "${PIDS}" ]]; then
-    echo "${PIDS}" | xargs kill -9 >/dev/null 2>&1 || true
+    echo "Port ${PORT} is already occupied. Stop your own server with Ctrl+C or choose another PORT."
+    exit 1
   fi
 fi
 
@@ -247,41 +246,7 @@ echo "Clearing Vite cache..."
 rm -rf node_modules/.vite
 
 echo "Starting fresh God's Eye View dev server..."
-case "${HOST}" in
-  localhost|127.0.0.1|::1)
-    echo "Local-only mode: reachable at http://localhost:${PORT}/ (set HOST=0.0.0.0 for LAN)"
-    ;;
-  *)
-    LAN_IP=""
-    if command -v ipconfig >/dev/null 2>&1; then
-      # macOS: first active interface wins
-      for iface in en0 en1; do
-        LAN_IP="$(ipconfig getifaddr "${iface}" 2>/dev/null || true)"
-        [[ -n "${LAN_IP}" ]] && break
-      done
-    elif command -v hostname >/dev/null 2>&1; then
-      # Linux: hostname -I lists addresses; take the first
-      LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
-    fi
-    echo ""
-    echo "!! =============================================================="
-    echo "!! WARNING: HOST=${HOST} — network-exposed mode."
-    echo "!! This dev server brokers your configured API keys (OpenAI,"
-    echo "!! OpenSky, AISStream, TomTom, FIRMS, LL2, Google) to ANYONE who can"
-    echo "!! reach it on the network. Use only on networks you trust."
-    echo "!! Consider the opt-in per-IP throttles GEV_RATELIMIT_OPENAI_PER_MIN"
-    echo "!! and GEV_RATELIMIT_GOOGLE_PER_MIN (see .env.example) — and note"
-    echo "!! they are NOT billing caps; set provider-side budget alerts too."
-    if [[ -n "${LAN_IP}" ]]; then
-      echo "!! LAN URL: http://${LAN_IP}:${PORT}/"
-    else
-      echo "!! LAN URL: http://<this-machine-ip>:${PORT}/"
-    fi
-    echo "!! =============================================================="
-    echo ""
-    echo "URL (this machine): http://localhost:${PORT}/"
-    ;;
-esac
+echo "Local-only mode: http://${HOST}:${PORT}/"
 echo "Google Maps key source: ${GOOGLE_MAPS_API_KEY_SOURCE}"
 echo "Tip: after server starts, hard refresh browser (Cmd+Shift+R)."
 echo "If panels are still missing, run this once in browser console:"
@@ -352,7 +317,7 @@ put_env_if_set() {
     # Leaving it out is not enough: the child inherits this shell's
     # environment, so an empty export made in the PARENT would pass straight
     # through and shadow .env just the same. Remove it from the child outright.
-    DEV_UNSET+=(-u "$1")
+    DEV_UNSET+=("$1")
   fi
 }
 
@@ -380,4 +345,7 @@ put_env_if_set LL2_API_TOKEN "${LL2_API_TOKEN}"
 put_env GEV_LAUNCHER "dev-fresh"
 put_env GEV_KEY_SETUP_EXTERNAL_KEYS "${KEY_SETUP_EXTERNAL_KEYS_CSV}"
 
-env ${DEV_UNSET[@]+"${DEV_UNSET[@]}"} "${DEV_ENV[@]}" "${DEV_COMMAND[@]}" --host "${HOST}" --port "${PORT}" --force
+# Use shell builtins so key values never become arguments of an `env` process.
+for provider_name in ${DEV_UNSET[@]+"${DEV_UNSET[@]}"}; do unset "$provider_name"; done
+for provider_assignment in "${DEV_ENV[@]}"; do export "$provider_assignment"; done
+exec "${DEV_COMMAND[@]}" --host "${HOST}" --port "${PORT}" --force

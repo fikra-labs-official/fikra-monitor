@@ -91,7 +91,7 @@ test('analyst: a subject without usable coordinates cannot lend its name to a ca
   assert.equal(r.count, 1, 'the count is the camera-centred one it actually measured');
   assert.equal(r.centeredOn, undefined, 'and it must not claim a centre it did not use');
   assert.equal(r.coverage.scope, 'radius:250km');
-  assert.equal(r.scopeLabel, 'within 250 km');
+  assert.equal(r.scopeLabel, 'в радиусе 250 км');
 });
 
 test('analyst: every scope names itself in words', async () => {
@@ -101,27 +101,27 @@ test('analyst: every scope names itself in words', async () => {
   const centred = await makeContactsEngine(subject).query({
     layers: ['flights'], scope: { kind: 'radius', km: 250 }, limit: 1,
   });
-  assert.equal(centred.scopeLabel, 'within 250 km of DYNO11');
+  assert.equal(centred.scopeLabel, 'в радиусе 250 км от DYNO11');
 
   const plainRadius = await makeContactsEngine(null).query({
     layers: ['flights'], scope: { kind: 'radius', km: 250 }, limit: 1,
   });
-  assert.equal(plainRadius.scopeLabel, 'within 250 km');
+  assert.equal(plainRadius.scopeLabel, 'в радиусе 250 км');
 
   const inView = await makeEngine().query({
     layers: ['flights'], scope: { kind: 'view' }, limit: 1,
   });
-  assert.equal(inView.scopeLabel, 'in view');
+  assert.equal(inView.scopeLabel, 'в поле зрения');
 
   const region = await makeEngine().query({
     layers: ['flights'], scope: { kind: 'region', name: 'Texland' }, limit: 1,
   });
-  assert.equal(region.scopeLabel, 'over Texland');
+  assert.equal(region.scopeLabel, 'над регионом Texland');
 
   const anywhere = await makeEngine().query({
     layers: ['flights'], scope: { kind: 'anywhere' }, limit: 1,
   });
-  assert.equal(anywhere.scopeLabel, 'anywhere in the loaded data');
+  assert.equal(anywhere.scopeLabel, 'во всех загруженных данных');
 });
 
 test('analyst: count flights over a region', async () => {
@@ -156,7 +156,7 @@ test('analyst: ships headed to Oakland (destination contains)', async () => {
   assert.deepEqual(r.items.map((i) => i.id), ['EVERGIVEN']);
 });
 
-test('analyst: superlative — biggest fire in view radius', async () => {
+test('analyst: superlative — biggest fire в поле зрения radius', async () => {
   const r = await makeEngine().query({
     layers: ['local-firms'], scope: { kind: 'view' }, sortBy: 'frp', limit: 1,
   });

@@ -1,13 +1,16 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, renameSync, rmSync, writeSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { parseEnv } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { hardenCredentialFile } from '../src/keySetupHardening.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_ENVIRONMENT_FILE = path.join(ROOT, 'pinokio', 'ENVIRONMENT');
 
 export const PINOKIO_CONFIG_FIELDS = Object.freeze([
   'GOOGLE_MAPS_API_KEY',
+  'GOOGLE_MAPS_SERVER_API_KEY',
   'CESIUM_ION_TOKEN',
   'OPENAI_API_KEY',
   'AISSTREAM_API_KEY',
@@ -71,9 +74,62 @@ export function readEnvironmentSource(filepath) {
   }
 }
 
+function existingSafeStore(filepath) {
+  const directory = lstatSync(path.dirname(filepath));
+  if (!directory.isDirectory() || directory.isSymbolicLink()) {
+    throw new Error('Pinokio configuration directory must be a real directory.');
+  }
+  try {
+    const entry = lstatSync(filepath);
+    if (!entry.isFile() || entry.isSymbolicLink()) {
+      throw new Error('Pinokio ENVIRONMENT must be a regular file, not a link.');
+    }
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+function persistEnvironment(filepath, encoded) {
+  // ponytail: the same hardened-temp/rename pattern as Provider Settings; no shared abstraction.
+  existingSafeStore(filepath);
+  const tmp = path.join(path.dirname(filepath), `.${path.basename(filepath)}.${randomUUID()}.tmp`);
+  const fd = openSync(tmp, 'wx', 0o600);
+  let complete = false;
+  try {
+    if (!hardenCredentialFile(tmp)) {
+      throw new Error('Pinokio ENVIRONMENT could not be restricted to your account.');
+    }
+    let offset = 0;
+    while (offset < encoded.length) {
+      const count = writeSync(fd, encoded, offset, encoded.length - offset);
+      if (count <= 0) throw new Error('Pinokio ENVIRONMENT could not be written completely.');
+      offset += count;
+    }
+    fsyncSync(fd);
+    complete = true;
+  } finally {
+    closeSync(fd);
+    if (!complete) rmSync(tmp, { force: true });
+  }
+  try {
+    renameSync(tmp, filepath);
+  } catch (error) {
+    rmSync(tmp, { force: true });
+    throw error;
+  }
+}
+
 /** Persist only the non-secret controls Pinokio itself re-reads at local.set. */
 export function ensurePinokioSharingBoundary(filepath = DEFAULT_ENVIRONMENT_FILE) {
-  const original = existsSync(filepath) ? readFileSync(filepath) : null;
+  const exists = existingSafeStore(filepath);
+  // A manually edited store may already be world-readable. Tighten it even
+  // when the sharing block is unchanged, and refuse to proceed on ACL failure.
+  if (exists && !hardenCredentialFile(filepath)) {
+    throw new Error('Pinokio ENVIRONMENT could not be restricted to your account.');
+  }
+  const original = exists ? readFileSync(filepath) : null;
   let source = readEnvironmentSource(filepath);
   try {
     if (source) parseEnv(source);
@@ -104,7 +160,7 @@ export function ensurePinokioSharingBoundary(filepath = DEFAULT_ENVIRONMENT_FILE
 
   const encoded = Buffer.from(source, 'utf8');
   if (!original || !original.equals(encoded)) {
-    writeFileSync(filepath, source, { mode: 0o600 });
+    persistEnvironment(filepath, encoded);
   }
   return configured;
 }

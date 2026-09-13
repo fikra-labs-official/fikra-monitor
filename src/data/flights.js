@@ -20,6 +20,7 @@
  * looking at (owner decision 2026-07-02).
  */
 import * as Cesium from 'cesium';
+import { t } from '../i18n/index.js';
 import { aircraftIncludedInNearby } from './aircraftNearbyPolicy.js';
 import { registerPickOwner, unregisterPickOwner, isOwnedByOtherLayer, resolvePickId } from './pickRegistry.js';
 import {
@@ -320,7 +321,7 @@ let _lastStatus = null;
 /** @type {string} Source used by the latest successful snapshot. */
 let _lastSource = 'OpenSky Network';
 /** @type {string} Completeness boundary for the latest successful snapshot. */
-let _lastCoverage = 'worldwide upstream snapshot';
+let _lastCoverage = 'глобальный снимок потока';
 
 function _flightApiUrl(viewer) {
   const cartographic = viewer?.camera?.positionCartographic;
@@ -419,7 +420,7 @@ function _contextSubjectMetadata(icao24) {
   return {
     id: icao24,
     layerId: 'flights',
-    layerName: 'Live Flights',
+    layerName: t('data.layer.flights'),
     source: 'OpenSky Network',
     label: _contactLabel(icao24, _flightData.get(icao24)),
     latitude: described.latitude,
@@ -432,9 +433,9 @@ function _contextSubjectMetadata(icao24) {
       callsign: described.callsign || '',
       registration: described.registration || '',
       type: described.typeName || described.typeCode || '',
-      altitude: described.onGround ? 'on ground' : `${altFt.toLocaleString('en-US')} ft`,
+      altitude: described.onGround ? 'на земле' : `${altFt.toLocaleString('ru-RU')} фт`,
       speed: Number.isFinite(described.velocityMps)
-        ? `${Math.round(described.velocityMps * 1.944)} kt`
+        ? `${Math.round(described.velocityMps * 1.944)} уз`
         : '',
       heading: Number.isFinite(described.track) ? `${Math.round(described.track)}°` : '',
       route: route || '',
@@ -1059,28 +1060,28 @@ function _deriveOpenSkyAuthError({ detail, authMode, authReason }) {
   const mode = _toLowerText(authMode);
 
   if (reason === 'oauth_invalid_or_missing') {
-    return 'OpenSky OAuth client missing/invalid';
+    return 'клиент OpenSky OAuth не задан или неверен';
   }
   if (reason === 'oauth_invalid_credentials') {
-    return 'OpenSky OAuth rejected credentials';
+    return 'OpenSky OAuth отклонил учетные данные';
   }
   if (reason === 'basic_invalid_credentials') {
-    return 'OpenSky username/password rejected';
+    return 'OpenSky отклонил имя или пароль';
   }
   if (reason === 'missing_basic_creds' || reason === 'missing_oauth_and_basic_creds') {
-    return 'OpenSky auth missing';
+    return 'нет данных для входа в OpenSky';
   }
   if (reason === 'auth_required') {
-    return 'OpenSky auth required';
+    return 'OpenSky требует авторизацию';
   }
   if (reason.startsWith('oauth_') || reason.startsWith('basic_')) {
-    return 'OpenSky auth invalid';
+    return 'ошибка авторизации OpenSky';
   }
   if (reason === 'forced_anonymous' || mode === 'anon') {
-    return 'OpenSky auth required';
+    return 'OpenSky требует авторизацию';
   }
   if (detail) return detail;
-  return 'OpenSky auth failed';
+  return 'не удалось войти в OpenSky';
 }
 
 /**
@@ -3278,9 +3279,9 @@ function _trackedLabelText(icao24) {
   // the tail number rather than raw hex.
   const cs = _contactLabel(icao24, info);
   const altFt = Math.round((info.altitude || 0) * 3.28084);
-  const fl = altFt >= 18000 ? `FL${Math.round(altFt / 100)}` : `${altFt} ft`;
-  const spd = info.velocity ? `${Math.round(info.velocity * 1.944)} kts` : '';
-  const stale = (_missingPolls.get(icao24) || _backoff) ? 'STALE' : '';
+  const fl = altFt >= 18000 ? `FL${Math.round(altFt / 100)}` : `${altFt} фт`;
+  const spd = info.velocity ? `${Math.round(info.velocity * 1.944)} уз` : '';
+  const stale = (_missingPolls.get(icao24) || _backoff) ? 'УСТАРЕЛО' : '';
   const lines = [[cs, fl, spd, stale].filter(Boolean).join(' · ')];
   // Converted contacts report their class as TR-3B and nothing else — the
   // operator/type identity is exactly what the Easter egg is replacing.
@@ -3880,7 +3881,7 @@ function _focusEvidenceSnapshot() {
  */
 const flightsLayer = {
   id: 'flights',
-  name: 'Live Flights',
+  name: t('data.layer.flights'),
   icon: '✈️',
   source: 'OpenSky Network',
   // Browser-harness seam: isolates synthetic display-floor scenarios without
@@ -4090,8 +4091,8 @@ const flightsLayer = {
         _backoff = true;
         _retryAt = nowMs + BACKOFF_INTERVAL;
         _lastError = authMode && authMode !== 'anon'
-          ? 'OpenSky rate limited'
-          : 'OpenSky rate limited (anonymous)';
+          ? 'OpenSky ограничил частоту запросов'
+          : 'OpenSky ограничил частоту анонимных запросов';
         return;
       }
 
@@ -4136,7 +4137,7 @@ const flightsLayer = {
       if (!data || !Array.isArray(data.states)) {
         _backoff = true;
         _retryAt = nowMs + ERROR_BACKOFF_INTERVAL;
-        _lastError = 'Malformed OpenSky response';
+        _lastError = 'неверный ответ OpenSky';
         return;
       }
 
@@ -4144,7 +4145,7 @@ const flightsLayer = {
       if (data.states.length > 0 && usableStates.length === 0) {
         _backoff = true;
         _retryAt = nowMs + ERROR_BACKOFF_INTERVAL;
-        _lastError = 'Malformed OpenSky aircraft rows';
+        _lastError = 'неверные записи о самолетах в ответе OpenSky';
         return;
       }
 
@@ -4156,10 +4157,10 @@ const flightsLayer = {
       _backoff = sourceStale;
       _retryAt = 0;
       _lastError = sourceStale
-        ? `Source snapshot ${Math.max(2, Math.round(sourceAgeMs / 60_000))} min old`
+        ? `снимок источника устарел на ${Math.max(2, Math.round(sourceAgeMs / 60_000))} мин`
         : null;
       _lastSource = responseSource || 'OpenSky Network';
-      _lastCoverage = responseCoverage || 'worldwide upstream snapshot';
+      _lastCoverage = responseCoverage || 'глобальный снимок потока';
       const currentIcaos = new Set();
       const acceptedSnapshotIcaos = new Set();
       const now = Cesium.JulianDate.now();
@@ -4623,7 +4624,7 @@ const flightsLayer = {
       console.warn('[Data:Flights] Fetch error:', e);
       _backoff = true;
       _retryAt = Date.now() + ERROR_BACKOFF_INTERVAL;
-      _lastError = 'OpenSky network error';
+      _lastError = 'сетевая ошибка OpenSky';
     } finally {
       _activeUpdateControllers.delete(resourceController);
     }

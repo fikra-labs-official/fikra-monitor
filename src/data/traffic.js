@@ -13,22 +13,20 @@ import {
 import { queuePlatoons, locateAlongRoad } from './trafficQueue.js';
 import { registerDynamicCredit, TOMTOM_CREDIT } from './dataCredits.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { t } from '../i18n/index.js';
 
 /**
- * @file Street Traffic — animated dots along OSM road polylines, colored by
- * live TomTom congestion when a key is configured.
+ * @file Street Traffic — animated dots along live TomTom road polylines when
+ * a key is configured, with OSM Overpass as the keyless simulation fallback.
  *
- * Road geometry: OSM Overpass API (free, no auth). Fetches road polylines for
- * the camera viewport, spawns PointPrimitives that lerp along pre-computed
- * Cartesian3 waypoints. Camera-gated: only active below ~8 km altitude.
+ * Road geometry: TomTom flow vector tiles in live mode; OSM Overpass API in
+ * keyless simulation mode. Camera-gated: only active below ~8 km altitude.
  *
  * Two modes (decided once per session via `/api/tomtom/status`):
  *  - `sim` (keyless default): white dots at hardcoded per-road-class speeds —
  *    the original simulation, byte-identical behavior.
- *  - `live`: TomTom flow tiles (`flowTiles.js`) are matched onto the same
- *    Overpass roads (`flowMatch.js`); matched roads color/slow/densify their
- *    dots by real congestion (`trafficFlowStyle.js`), closed roads spawn no
- *    dots, and unmatched roads keep the simulated white.
+ *  - `live`: TomTom flow tiles (`flowTiles.js`) provide both geometry and
+ *    congestion. Overpass remains a fallback if live flow is unavailable.
  *
  * Architecture overview:
  *  - Camera-change listener triggers debounced road fetching per viewport tile.
@@ -98,6 +96,15 @@ const DENSITY_MULT = {
 const SIZE_BY_TYPE = {
   motorway: 6, trunk: 6, primary: 5, secondary: 5,
   tertiary: 4, residential: 4, unclassified: 4,
+};
+
+/** TomTom vector-tile road classes mapped onto the existing visual tiers. */
+const TOMTOM_ROAD_TYPE_TO_HIGHWAY = {
+  motorway: 'motorway',
+  'major road': 'primary',
+  'major local road': 'secondary',
+  'secondary road': 'tertiary',
+  'connecting road': 'unclassified',
 };
 
 /**
@@ -191,12 +198,16 @@ let _liveMode = false;
  * @type {string|null}
  */
 let _flowError = null;
+/** No road geometry from either active source for the latest viewport load. */
+let _roadError = null;
 /**
  * True when `/api/tomtom/status` itself could not be reached, so the layer is
  * simulating because it could not ask — not because the server said "no key".
  * @type {boolean}
  */
 let _flowStatusUnavailable = false;
+/** @type {'OpenStreetMap'|'TomTom'|'Нет данных'} Geometry currently rendered on screen. */
+let _geometrySource = 'OpenStreetMap';
 /**
  * Flow requests this layer still owns. The 250 ms paint race lets a flow
  * fetch outlive the road load that started it (cached roads settle
@@ -528,6 +539,73 @@ async function fetchRoads(
 }
 
 /**
+ * Convert decoded TomTom flow segments into the same lightweight element
+ * shape consumed by parseRoads. TomTom flow lines are directional, so the
+ * fallback marks them one-way and carries their flow value straight through.
+ *
+ * @param {Array} segments Decoded flow segments from flowTiles.js.
+ * @param {{south:number,west:number,north:number,east:number}|null} bounds
+ * @returns {{elements:Array}}
+ */
+export function tomTomFlowSegmentsToRoadData(segments, bounds = null) {
+  const elements = [];
+  const hasBounds = ['south', 'west', 'north', 'east']
+    .every((key) => Number.isFinite(bounds?.[key]));
+
+  for (const segment of Array.isArray(segments) ? segments : []) {
+    const coords = Array.isArray(segment?.coords) ? segment.coords : [];
+    if (coords.length < 2 || !coords.every((coord) => (
+      Array.isArray(coord)
+      && Number.isFinite(coord[0])
+      && Number.isFinite(coord[1])
+    ))) continue;
+
+    if (hasBounds) {
+      let minLon = Infinity;
+      let maxLon = -Infinity;
+      let minLat = Infinity;
+      let maxLat = -Infinity;
+      for (const [lon, lat] of coords) {
+        minLon = Math.min(minLon, lon);
+        maxLon = Math.max(maxLon, lon);
+        minLat = Math.min(minLat, lat);
+        maxLat = Math.max(maxLat, lat);
+      }
+      const latOverlaps = maxLat >= bounds.south && minLat <= bounds.north;
+      const lonOverlaps = bounds.west <= bounds.east
+        ? maxLon >= bounds.west && minLon <= bounds.east
+        : maxLon >= bounds.west || minLon <= bounds.east;
+      if (!latOverlaps || !lonOverlaps) continue;
+    }
+
+    const level = Number(segment.trafficLevel);
+    if (!Number.isFinite(level)) continue;
+    const roadType = String(segment.roadType || '').trim().toLowerCase();
+    elements.push({
+      type: 'way',
+      geometry: coords.map(([lon, lat]) => ({ lon, lat })),
+      tags: {
+        highway: TOMTOM_ROAD_TYPE_TO_HIGHWAY[roadType] || 'unclassified',
+        oneway: 'yes',
+      },
+      flow: {
+        level: Math.max(0, Math.min(1, level)),
+        closure: segment.closure === true,
+      },
+    });
+  }
+
+  return { elements };
+}
+
+function flowFromRoadElement(element) {
+  const level = Number(element?.flow?.level);
+  return Number.isFinite(level)
+    ? { level: Math.max(0, Math.min(1, level)), closure: element.flow.closure === true }
+    : null;
+}
+
+/**
  * Parse an Overpass `out geom;` JSON response into internal road objects.
  *
  * Each OSM `way` element carries an inline `geometry` array of `{lat, lon}`
@@ -602,7 +680,8 @@ function parseRoads(overpassData) {
       segmentDist.push(Cesium.Cartesian3.distance(waypoints[i], waypoints[i + 1]));
     }
 
-    roads.push({ coords, type, oneway, waypoints, segmentDist });
+    const flow = flowFromRoadElement(el);
+    roads.push({ coords, type, oneway, waypoints, segmentDist, ...(flow ? { flow } : {}) });
   }
 
   return roads;
@@ -1215,11 +1294,11 @@ export function deriveTrafficFlowError(error) {
   if (!error || error.name === 'AbortError') return null;
   const message = String(error.message || error);
   const status = Number(message.match(/HTTP (\d{3})/)?.[1]);
-  if (status === 503) return 'TomTom key unavailable';
-  if (status === 429) return 'TomTom daily budget reached';
-  if (status === 502 || status === 504) return 'TomTom upstream unreachable';
-  if (Number.isFinite(status)) return `TomTom flow error (HTTP ${status})`;
-  return 'TomTom flow unavailable';
+  if (status === 503) return 'ключ TomTom недоступен';
+  if (status === 429) return 'дневной лимит TomTom исчерпан';
+  if (status === 502 || status === 504) return 'сервис TomTom не отвечает';
+  if (Number.isFinite(status)) return `ошибка потока TomTom (HTTP ${status})`;
+  return 'поток TomTom недоступен';
 }
 
 /**
@@ -1238,6 +1317,7 @@ export function deriveTrafficFlowError(error) {
  * @param {string|null} [input.flowError] - `deriveTrafficFlowError` result, if any.
  * @param {number} [input.coveragePct] - Matched-road coverage, 0–100.
  * @param {boolean} [input.statusUnavailable] - The status probe itself failed.
+ * @param {string|null} [input.unavailableReason] - Neither source rendered roads.
  * @returns {{mode:'live'|'sim', error:string|null, loadingLabel:string}}
  */
 export function trafficFeedPresentation({
@@ -1246,17 +1326,22 @@ export function trafficFeedPresentation({
   flowError = null,
   coveragePct = 0,
   statusUnavailable = false,
+  unavailableReason = null,
 } = {}) {
   // `mode` is the CONFIGURED source (live key present vs keyless), not this
   // instant's health — health rides on `error`. The qa-traffic harness pins
   // that meaning.
   const mode = liveMode ? 'live' : 'sim';
+  if (unavailableReason) {
+    const unavailable = `ДАННЫЕ НЕДОСТУПНЫ · ${flowError ? `${flowError} · ` : ''}${unavailableReason}`;
+    return { mode, error: unavailable, loadingLabel: unavailable };
+  }
   if (liveMode && flowError) {
     // One string for both fields. The manager's meta line renders `error` and
     // drops `loadingLabel` in its error branch, so the owner's SIMULATED copy
     // has to BE the error text or the steady state reverts to a bare
     // "TomTom daily budget reached" that never says what is on screen.
-    const degraded = `SIMULATED — ${flowError}`;
+    const degraded = `СИМУЛЯЦИЯ · ${flowError}`;
     return { mode, error: degraded, loadingLabel: degraded };
   }
   if (liveMode) {
@@ -1264,8 +1349,8 @@ export function trafficFeedPresentation({
       mode,
       error: null,
       loadingLabel: fetching
-        ? 'syncing LIVE traffic flow'
-        : `LIVE · TomTom flow · ${coveragePct}% cov`,
+        ? 'синхронизация дорожного потока'
+        : `ПРЯМОЙ ПОТОК · покрытие ${coveragePct}%`,
     };
   }
   // Keyless simulation — one terse line that names the mode and the remedy
@@ -1275,8 +1360,8 @@ export function trafficFeedPresentation({
     mode,
     error: null,
     loadingLabel: statusUnavailable
-      ? 'SIMULATED — traffic service unreachable'
-      : 'SIMULATED — add TomTom key for live',
+      ? 'СИМУЛЯЦИЯ · сервис дорожного движения недоступен'
+      : 'СИМУЛЯЦИЯ · добавьте ключ TomTom для прямого потока',
   };
 }
 
@@ -1343,6 +1428,7 @@ async function applyFlowToRoads(roads, clamped, generation) {
       // reuse theirs so one cancel covers both roads and flow.
       if (!_activeFetchAbort) _activeFetchAbort = new AbortController();
       const segments = await fetchFlowForBounds(clamped, { signal: _activeFetchAbort.signal });
+      if (segments.length === 0) throw new Error('flow returned no road geometry');
       if (generation !== _loadGeneration) return;
       const { matches, matchedCount, candidateCount } = matchFlowToRoads(roads, segments);
       for (let i = 0; i < roads.length; i++) {
@@ -1909,7 +1995,8 @@ function parseRoadsTimed(overpassData, trace) {
     _trafficTimingWaypointMaterializationMs += performance.now() - _trafficTimingMaterializeStart;
     /* TRACE_ONLY_END */
 
-    roads.push({ coords, type, oneway, waypoints, segmentDist });
+    const flow = flowFromRoadElement(el);
+    roads.push({ coords, type, oneway, waypoints, segmentDist, ...(flow ? { flow } : {}) });
   }
 
   /* TRACE_ONLY_BEGIN */
@@ -2041,15 +2128,6 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
   // Cache key: fixed-precision bounding-box string for deterministic lookups
   const cacheKey = `${clamped.south.toFixed(4)},${clamped.west.toFixed(4)},${clamped.north.toFixed(4)},${clamped.east.toFixed(4)}`;
 
-  // Live mode: warm the flow-tile cache CONCURRENTLY with the Overpass road
-  // fetch — sequential fetches doubled first-paint latency (field-test
-  // round 1). Failures are irrelevant; applyFlowToRoads settles the truth.
-  ensureFlowStatus().then(() => {
-    if (_liveMode && _enabled && generation === _loadGeneration) {
-      fetchFlowForBounds(clamped, {}).catch(() => { /* warm-up only */ });
-    }
-  });
-
   _fetching = true;
   // Only COMMIT these on success. Committing up-front means a failed Overpass
   // fetch (rate-limited / feed down) still trips the overlap gate in
@@ -2060,8 +2138,40 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
   _lastBounds = clamped;
   _lastViewCenter = getBoundsCenter(clamped);
   let renderedSomething = false;
+  let roadFetchFailed = false;
 
   try {
+    await ensureFlowStatus();
+    if (generation !== _loadGeneration || !_enabled) return;
+
+    // TomTom tiles already contain road polylines. Use them directly in live
+    // mode so a public Overpass outage cannot blank paid traffic data.
+    if (_liveMode) {
+      try {
+        _activeFetchAbort = new AbortController();
+        const segments = await fetchFlowForBounds(clamped, {
+          signal: _activeFetchAbort.signal,
+          requireComplete: true,
+        });
+        if (generation !== _loadGeneration || !_enabled) return;
+        const roads = _parseRoads(tomTomFlowSegmentsToRoadData(segments, clamped), trace);
+        if (roads.length === 0) throw new Error('flow returned no road geometry');
+        _flowCoveragePct = 100;
+        _flowError = null;
+        _geometrySource = 'TomTom';
+        renderRoadsForAltitude(roads, altitude, 'TomTom direct', trace);
+        renderedSomething = true;
+        return;
+      } catch (e) {
+        if (e?.name === 'AbortError') return;
+        if (generation !== _loadGeneration || !_enabled) return;
+        _flowError = deriveTrafficFlowError(e);
+        _flowCoveragePct = 0;
+        console.warn('[Data:Traffic] Direct TomTom geometry unavailable; trying Overpass fallback:', e?.message || e);
+      }
+    }
+
+    _geometrySource = 'OpenStreetMap';
     let cache = _tileCache.get(cacheKey);
     if (!cache) {
       // LRU eviction: drop the oldest entry when cache exceeds the cap
@@ -2129,6 +2239,7 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
 
   } catch (e) {
     if (e?.name === 'AbortError') return;
+    roadFetchFailed = true;
     console.warn('[Data:Traffic] Fetch error:', e);
   } finally {
     if (generation === _loadGeneration) {
@@ -2140,6 +2251,18 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
       if (!renderedSomething) {
         _lastBounds = prevBounds;
         _lastViewCenter = prevViewCenter;
+        if (roadFetchFailed) {
+          // Both the direct TomTom path and its Overpass fallback failed. Old
+          // dots are no longer evidence for this viewport; do not relabel
+          // them as fresh OpenStreetMap simulation.
+          clearDots();
+          _lastUpdate = null;
+          _flowCoveragePct = 0;
+          _geometrySource = 'Нет данных';
+          _roadError = 'дорожная геометрия недоступна';
+        }
+      } else {
+        _roadError = null;
       }
     }
     _activeFetchAbort = null;
@@ -2171,7 +2294,7 @@ function clearDots() {
  */
 const trafficLayer = {
   id: 'traffic',
-  name: 'Street Traffic',
+  name: t('data.layer.traffic'),
   icon: '🚗',
   source: 'OpenStreetMap',
   /** @type {number} Zero — layer is self-managed via camera listener + preRender */
@@ -2204,6 +2327,8 @@ const trafficLayer = {
     _lastViewCenter = null;
     _flowCoveragePct = 0;
     _flowError = null;
+    _roadError = null;
+    _geometrySource = 'OpenStreetMap';
     if (TRAFFIC_TIMING_ENABLED) {
       _trafficTimingCurrentAnchor = null;
       _trafficTimingSequence = 0;
@@ -2298,6 +2423,8 @@ const trafficLayer = {
     // A stale outage from the last session would misreport a fresh enable —
     // the next load re-derives feed health from real evidence.
     _flowError = null;
+    _roadError = null;
+    _geometrySource = 'OpenStreetMap';
 
     if (_preRenderRemover) {
       _preRenderRemover();
@@ -2471,9 +2598,11 @@ const trafficLayer = {
       flowError: _flowError,
       coveragePct: _flowCoveragePct,
       statusUnavailable: _flowStatusUnavailable,
+      unavailableReason: _roadError,
     });
     return {
       count: _count,
+      source: _geometrySource,
       lastUpdate: _lastUpdate,
       loading,
       mode: feed.mode,

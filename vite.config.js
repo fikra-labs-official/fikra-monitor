@@ -1,5 +1,5 @@
 /**
- * Vite configuration for God's Eye View — a cinematic geospatial app.
+ * Vite configuration for Fikra Monitor — a cinematic geospatial app.
  *
  * Registers the dev-server proxy middlewares that bypass CORS and add
  * caching/auth for upstream APIs:
@@ -75,6 +75,9 @@ import {
   validTerrainResult,
 } from './src/data/terrainHeightsProxy.js';
 import { VOICE_MODELS, isKnownVoiceTier, resolveVoiceModel } from './src/voice/voiceCost.js';
+import { localSecurityPlugin, safeProviderError, writeSafeDebugLog } from './src/server/localSecurity.mjs';
+import { liveVoiceProxy } from './src/server/liveVoice.mjs';
+import { googleGeocodingProxy } from './src/server/googleGeocoding.mjs';
 
 /** Resolve __dirname for ESM context. */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -358,7 +361,7 @@ async function readOverpassDisk(cacheKey, maxAgeMs) {
 function writeOverpassDisk(cacheKey, payload) {
   fsp.mkdir(OVERPASS_DISK_DIR, { recursive: true })
     .then(() => fsp.writeFile(overpassDiskPath(cacheKey), JSON.stringify(payload)))
-    .catch((err) => console.warn('[Overpass Proxy] disk cache write failed:', err?.message || err));
+    .catch((err) => console.warn('[Overpass Proxy] disk cache write failed:', safeProviderError(err)));
 }
 
 /**
@@ -522,7 +525,7 @@ function enforceOptInRateLimit(limiter, req, res) {
   res.statusCode = 429;
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Retry-After', '5');
-  res.end(JSON.stringify({ error: 'Rate limit exceeded' }));
+  res.end(JSON.stringify({ error: 'Превышен лимит запросов' }));
   return false;
 }
 
@@ -614,11 +617,11 @@ function stripOverpassNoise(src) {
 
 function sanitizeOverpassBody(rawBody) {
   let params;
-  try { params = new URLSearchParams(rawBody); } catch { return { ok: false, error: 'Malformed query body' }; }
+  try { params = new URLSearchParams(rawBody); } catch { return { ok: false, error: 'Некорректное тело запроса' }; }
   const all = params.getAll('data');
-  if (all.length !== 1) return { ok: false, error: 'Exactly one data query is required' };
+  if (all.length !== 1) return { ok: false, error: 'Нужен ровно один запрос данных' };
   const data = all[0];
-  if (!data || !data.trim()) return { ok: false, error: 'Missing Overpass data query' };
+  if (!data || !data.trim()) return { ok: false, error: 'Не задан запрос данных Overpass' };
 
   // Blank quoted literals + strip comments in one lexer pass so a fake bound or a
   // `//` inside a string can't hide an unbounded selector (or satisfy a bound).
@@ -630,14 +633,14 @@ function sanitizeOverpassBody(rawBody) {
   for (const m of stripped.matchAll(/around(?:\.\w+)?:\s*([\d.eE+-]+)/gi)) {
     const radius = Number(m[1]);
     if (!Number.isFinite(radius) || radius > OVERPASS_MAX_AROUND_M) {
-      return { ok: false, error: 'Overpass around radius too large' };
+      return { ok: false, error: 'Слишком большой радиус запроса Overpass' };
     }
   }
   // Reject world-sized / oversized bboxes.
   for (const m of stripped.matchAll(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/g)) {
     const s = Number(m[1]); const w = Number(m[2]); const n = Number(m[3]); const e = Number(m[4]);
     if (Math.abs(n - s) > OVERPASS_MAX_BBOX_DEG || Math.abs(e - w) > OVERPASS_MAX_BBOX_DEG) {
-      return { ok: false, error: 'Overpass bbox too large' };
+      return { ok: false, error: 'Слишком большая область запроса Overpass' };
     }
   }
 
@@ -645,12 +648,12 @@ function sanitizeOverpassBody(rawBody) {
   // are hard to validate statically. The app only uses plain selectors + is_in /
   // area / pivot / recursion, so this denylist closes loop/transform escape hatches.
   if (/\b(?:foreach|complete|retro|compare|convert|make)\b/i.test(stripped)) {
-    return { ok: false, error: 'Unsupported Overpass construct' };
+    return { ok: false, error: 'Неподдерживаемая конструкция Overpass' };
   }
   // `poly:` has unchecked extent and the app never uses it — reject outright
   // (position-independent, so tag filters can't hide it).
   if (/\bpoly\s*:/i.test(stripped)) {
-    return { ok: false, error: 'Overpass poly filter not allowed' };
+    return { ok: false, error: 'Фильтр poly в Overpass запрещен' };
   }
 
   // Every selector statement must be individually bounded, WITH set provenance: a
@@ -676,7 +679,7 @@ function sanitizeOverpassBody(rawBody) {
     // SELECTS admin areas (area.set) and pivots (rel(pivot.x)), never node/way/
     // relation(area...). The probe collapses tags so `way (area.a)` is caught.
     if (OVERPASS_AREA_ELEMENT_RE.test(probe)) {
-      return { ok: false, error: 'Overpass area-bounded element selector not allowed' };
+      return { ok: false, error: 'Такой выбор элементов по области Overpass запрещен' };
     }
 
     const hasSelector = OVERPASS_SELECTOR_RE.test(probe);
@@ -690,7 +693,7 @@ function sanitizeOverpassBody(rawBody) {
     const bounded = directBound || setBound;
 
     if (hasSelector && !bounded) {
-      return { ok: false, error: 'Overpass query has an unbounded selector' };
+      return { ok: false, error: 'В запросе Overpass есть неограниченный выбор объектов' };
     }
     // Only a bounded statement can mark its output sets as bounded.
     if (bounded) for (const name of outSets) boundedSets.add(name);
@@ -1265,7 +1268,7 @@ export function createRadioProxyMiddleware({ fetchImpl = null, lookupImpl = look
         });
       } catch (error) {
         sendJson(res, 503, {
-          error: 'Radio directory is temporarily unavailable',
+          error: 'Каталог радиостанций временно недоступен',
           degraded: Boolean(error?.radioCatalogDegraded),
           degradedReason: error?.radioDegradedReason || null,
         });
@@ -1282,7 +1285,7 @@ export function createRadioProxyMiddleware({ fetchImpl = null, lookupImpl = look
       }
       const id = clickMatch[1].toLowerCase();
       if (!RADIO_UUID_RE.test(id) || !servedStationIds.has(id)) {
-        sendJson(res, 404, { error: 'Unknown radio station' });
+        sendJson(res, 404, { error: 'Радиостанция не найдена' });
         return;
       }
       res.writeHead(204, { 'Cache-Control': 'no-store' });
@@ -1291,7 +1294,7 @@ export function createRadioProxyMiddleware({ fetchImpl = null, lookupImpl = look
       return;
     }
 
-    sendJson(res, 404, { error: 'Unknown radio route' });
+    sendJson(res, 404, { error: 'Маршрут радио не найден' });
   };
 }
 
@@ -1366,14 +1369,14 @@ const AISSTREAM_TICK_MS = 15_000;
 // can never be computed against a different model than the session runs on.
 const OPENAI_REALTIME_MODEL_DEFAULT = VOICE_MODELS.standard.id;
 const OPENAI_REALTIME_MODEL_MINI_DEFAULT = VOICE_MODELS.mini.id;
-const OPENAI_REALTIME_VOICE_DEFAULT = 'marin';
+const OPENAI_REALTIME_VOICE_DEFAULT = 'cedar';
 const OPENAI_REALTIME_REASONING_DEFAULT = 'low';
 const OPENAI_REALTIME_CONTEXT_TOKENS_DEFAULT = 3000;
 const OPENAI_REALTIME_CONTEXT_RETENTION_DEFAULT = 0.5;
-const OPENAI_HUD_SUMMARY_MODEL_DEFAULT = 'gpt-5-nano';
+const OPENAI_HUD_SUMMARY_MODEL_DEFAULT = 'gpt-5.4-mini';
 const REALTIME_DEBUG_LOG_DIR = path.join(__dirname, '.gev-logs');
 const REALTIME_DEBUG_LOG_FILE = path.join(REALTIME_DEBUG_LOG_DIR, 'realtime-conversations.jsonl');
-const REALTIME_DEBUG_LOG_MAX_BYTES = 8 * 1024 * 1024;
+const REALTIME_DEBUG_LOG_MAX_BYTES = 64 * 1024;
 
 /**
  * @type {ReturnType<typeof createAisStreamAdapter>|null}
@@ -1460,7 +1463,7 @@ async function getOpenSkyToken() {
       return _openskyToken;
     } catch (err) {
       if (!_openskyAuthWarned) {
-        console.warn('[OpenSky] OAuth token request failed:', err?.message || String(err));
+        console.warn('[OpenSky] OAuth token request failed:', safeProviderError(err));
         _openskyAuthWarned = true;
       }
       _openskyToken = null;
@@ -1563,7 +1566,7 @@ function celestrakProxy() {
       await fsp.mkdir(CACHE_DIR, { recursive: true });
       await fsp.writeFile(diskPath(group), JSON.stringify(entry), 'utf8');
     } catch (err) {
-      console.warn(`[celestrak-proxy] cache write failed for ${group}:`, err?.message || err);
+      console.warn(`[celestrak-proxy] cache write failed for ${group}:`, safeProviderError(err));
     }
   }
 
@@ -1622,7 +1625,7 @@ function celestrakProxy() {
                 return fresh;
               })
               .catch((err) => {
-                console.warn(`[celestrak-proxy] ${group} refresh failed (${err?.message || err}) — serving cache if any`);
+                console.warn(`[celestrak-proxy] ${group} refresh failed (${safeProviderError(err)}) — serving cache if any`);
                 return null;
               })
               .finally(() => inflight.delete(group)));
@@ -1633,10 +1636,11 @@ function celestrakProxy() {
           } else if (entry) {
             send(200, entry.body, 'STALE-ERROR'); // upstream down — stale beats empty
           } else {
-            send(502, 'celestrak fetch failed and no cache available', 'NONE');
+            send(502, 'Не удалось получить данные CelesTrak, а кеш недоступен', 'NONE');
           }
         } catch (err) {
-          send(500, `celestrak proxy error: ${err?.message || err}`, 'ERROR');
+          console.error('[CelesTrak Proxy]', safeProviderError(err));
+          send(500, 'Ошибка соединения с CelesTrak', 'ERROR');
         }
       });
     },
@@ -1683,7 +1687,7 @@ function rocketLaunchesProxy() {
       await fsp.mkdir(path.dirname(cachePath), { recursive: true });
       await fsp.writeFile(cachePath, JSON.stringify(entry), 'utf8');
     } catch (error) {
-      console.warn(`[launch-library-proxy] cache write failed: ${error?.message || error}`);
+      console.warn(`[launch-library-proxy] cache write failed: ${safeProviderError(error)}`);
     }
   }
 
@@ -1726,7 +1730,7 @@ function rocketLaunchesProxy() {
   function install(middlewares) {
     middlewares.use('/api/launches', async (req, res) => {
       if (req.method !== 'GET') {
-        send(res, 405, JSON.stringify({ error: 'Method Not Allowed' }), 'NONE');
+        send(res, 405, JSON.stringify({ error: 'Метод не поддерживается' }), 'NONE');
         return;
       }
       await loadDiskCache();
@@ -1742,14 +1746,14 @@ function rocketLaunchesProxy() {
         send(res, 200, fresh.body, request.shared ? 'INFLIGHT' : 'MISS');
       } catch (error) {
         if (stale) {
-          if (!request.shared) console.warn(`[launch-library-proxy] refresh failed (${error?.message || error}) — serving stale cache`);
+          if (!request.shared) console.warn(`[launch-library-proxy] refresh failed (${safeProviderError(error)}) — serving stale cache`);
           send(res, 200, stale.body, 'STALE-ERROR');
           return;
         }
         send(
           res,
           Number.isInteger(error?.upstreamStatus) ? error.upstreamStatus : 502,
-          error?.upstreamBody || JSON.stringify({ error: 'Launch Library 2 unavailable' }),
+          JSON.stringify({ error: 'Launch Library 2 временно недоступна' }),
           'NONE',
         );
       }
@@ -1830,7 +1834,7 @@ function tomtomProxy() {
       await fsp.mkdir(CACHE_DIR, { recursive: true });
       await fsp.writeFile(BUDGET_PATH, JSON.stringify(budget), 'utf8');
     } catch (err) {
-      console.warn('[tomtom-proxy] budget write failed:', err?.message || err);
+      console.warn('[tomtom-proxy] budget write failed:', safeProviderError(err));
     }
   }
 
@@ -1864,7 +1868,7 @@ function tomtomProxy() {
       await fsp.mkdir(CACHE_DIR, { recursive: true });
       await fsp.writeFile(tilePath(key), buf);
     } catch (err) {
-      console.warn(`[tomtom-proxy] tile cache write failed for ${key}:`, err?.message || err);
+      console.warn(`[tomtom-proxy] tile cache write failed for ${key}:`, safeProviderError(err));
     }
   }
 
@@ -1975,7 +1979,7 @@ function tomtomProxy() {
                 return fresh;
               })
               .catch((err) => {
-                console.warn(`[tomtom-proxy] ${key} fetch failed (${err?.message || err}) — serving stale if any`);
+                console.warn(`[tomtom-proxy] ${key} fetch failed (${safeProviderError(err)}) — serving stale if any`);
                 return null;
               })
               .finally(() => inflight.delete(key)));
@@ -1989,7 +1993,7 @@ function tomtomProxy() {
             sendJson(502, { error: 'upstream' });
           }
         } catch (err) {
-          console.warn('[tomtom-proxy] error:', err?.message || err);
+          console.warn('[tomtom-proxy] error:', safeProviderError(err));
           sendJson(500, { error: 'proxy' });
         }
       });
@@ -2054,7 +2058,7 @@ function firmsProxy() {
       await fsp.mkdir(CACHE_DIR, { recursive: true });
       await fsp.writeFile(CACHE_PATH, JSON.stringify(entry), 'utf8');
     } catch (err) {
-      console.warn('[firms-proxy] cache write failed:', err?.message || err);
+      console.warn('[firms-proxy] cache write failed:', safeProviderError(err));
     }
   }
 
@@ -2091,7 +2095,7 @@ function firmsProxy() {
         // ~131k records — RangeError, and the whole source is silently dropped.
         for (const record of records) fires.push(record);
       } catch (err) {
-        console.warn(`[firms-proxy] ${source} fetch failed:`, err?.message || err);
+        console.warn(`[firms-proxy] ${source} fetch failed:`, safeProviderError(err));
         sources.push({ source, count: 0, ok: false });
       }
     }
@@ -2132,7 +2136,7 @@ function firmsProxy() {
           const limit = Number(body?.transaction_limit);
           return Number.isFinite(used) && Number.isFinite(limit) ? { used, limit } : null;
         } catch (err) {
-          console.warn('[firms-proxy] mapkey status failed:', err?.message || err);
+          console.warn('[firms-proxy] mapkey status failed:', safeProviderError(err));
           return null;
         }
       })()
@@ -2197,7 +2201,7 @@ function firmsProxy() {
                 return fresh;
               })
               .catch((err) => {
-                console.warn(`[firms-proxy] refresh failed (${err?.message || err}) — serving cache if any`);
+                console.warn(`[firms-proxy] refresh failed (${safeProviderError(err)}) — serving cache if any`);
                 return null;
               })
               .finally(() => { inflight = null; });
@@ -2209,11 +2213,11 @@ function firmsProxy() {
           } else if (entry) {
             sendJson(200, buildPayload(entry, true)); // upstream down — stale beats empty
           } else {
-            sendJson(502, { error: 'firms fetch failed and no cache available' });
+            sendJson(502, { error: 'Не удалось получить данные FIRMS, а кеш недоступен' });
           }
         } catch (err) {
-          console.warn('[firms-proxy] error:', err?.message || err);
-          sendJson(500, { error: 'firms proxy error' });
+          console.warn('[firms-proxy] error:', safeProviderError(err));
+          sendJson(500, { error: 'Ошибка соединения с NASA FIRMS' });
         }
       });
     },
@@ -2287,7 +2291,7 @@ function terrainHeightsProxy() {
         await fsp.writeFile(CACHE_PATH, JSON.stringify(obj), 'utf8');
       } catch (err) {
         diskDirty = true; // retry next tick
-        console.warn('[terrain-heights-proxy] cache write failed:', err?.message || err);
+        console.warn('[terrain-heights-proxy] cache write failed:', safeProviderError(err));
       }
     }, 15_000).unref?.();
   }
@@ -2341,11 +2345,11 @@ function terrainHeightsProxy() {
           const rawPoints = parsedUrl.searchParams.get('points');
           const points = parseTerrainPoints(rawPoints);
           if (!points) {
-            send(400, { error: 'invalid points parameter — expected "lon,lat;lon,lat;…" with finite numbers' });
+            send(400, { error: 'Некорректные точки. Ожидается формат «долгота,широта;долгота,широта»' });
             return;
           }
           if (points.length > MAX_POINTS) {
-            send(500, { error: `too many points (${points.length}); max ${MAX_POINTS} per request` });
+            send(500, { error: `Слишком много точек: ${points.length}. Максимум за запрос: ${MAX_POINTS}` });
             return;
           }
 
@@ -2364,7 +2368,8 @@ function terrainHeightsProxy() {
           }
           send(outcome.status, outcome.body);
         } catch (err) {
-          send(500, { error: `terrain heights proxy error: ${err?.message || err}` });
+          console.error('[Terrain Heights Proxy]', safeProviderError(err));
+          send(500, { error: 'Не удалось получить высоты рельефа' });
         }
       });
     },
@@ -2473,19 +2478,20 @@ function adsbdbProxy() {
           const [, kind, rawKey] = String(req.url || '').split('?')[0].split('/');
           if (kind === 'route') {
             const cs = String(rawKey || '').toUpperCase();
-            if (!/^[A-Z0-9]{2,8}$/.test(cs)) return send(400, { error: 'invalid callsign' });
+            if (!/^[A-Z0-9]{2,8}$/.test(cs)) return send(400, { error: 'Некорректный позывной' });
             const data = await lookup('route', cs);
             return send(200, data ? { found: true, ...data } : { found: false });
           }
           if (kind === 'type') {
             const hex = String(rawKey || '').toLowerCase();
-            if (!/^[0-9a-f]{6}$/.test(hex)) return send(400, { error: 'invalid hex' });
+            if (!/^[0-9a-f]{6}$/.test(hex)) return send(400, { error: 'Некорректный код ICAO24' });
             const data = await lookup('aircraft', hex);
             return send(200, data ? { found: true, ...data } : { found: false });
           }
-          return send(404, { error: 'unknown endpoint' });
+          return send(404, { error: 'Точка API не найдена' });
         } catch (err) {
-          return send(500, { error: String(err?.message || err) });
+          console.error('[ADSBDB Proxy]', safeProviderError(err));
+          return send(500, { error: 'Ошибка соединения с ADSBDB' });
         }
       });
     },
@@ -2643,7 +2649,7 @@ function overpassProxy() {
         try {
           if (req.method !== 'POST') {
             res.writeHead(405, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+            res.end(JSON.stringify({ error: 'Метод не поддерживается' }));
             return;
           }
 
@@ -2654,14 +2660,14 @@ function overpassProxy() {
           } catch (err) {
             if (err?.code === 'BODY_TOO_LARGE') {
               res.writeHead(413, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Overpass query too large' }));
+              res.end(JSON.stringify({ error: 'Слишком большой запрос Overpass' }));
               return;
             }
             throw err;
           }
           if (!body) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Missing Overpass query body' }));
+            res.end(JSON.stringify({ error: 'Не задан запрос Overpass' }));
             return;
           }
 
@@ -2688,7 +2694,7 @@ function overpassProxy() {
           });
           if (preflight.source === 'RATE_LIMITED') {
             res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '5' });
-            res.end(JSON.stringify({ error: 'Rate limit exceeded' }));
+            res.end(JSON.stringify({ error: 'Превышен лимит запросов' }));
             return;
           }
           if (preflight.source !== 'UPSTREAM') {
@@ -2704,7 +2710,7 @@ function overpassProxy() {
           // consumed one local limiter slot. Cache and dedupe hits above do not.
           if (_overpassConcurrent >= OVERPASS_MAX_CONCURRENT) {
             res.writeHead(503, { 'Content-Type': 'application/json', 'Retry-After': '2' });
-            res.end(JSON.stringify({ error: 'Overpass proxy busy — try again shortly' }));
+            res.end(JSON.stringify({ error: 'Сервис Overpass занят. Повторите попытку чуть позже' }));
             return;
           }
           _overpassConcurrent += 1;
@@ -2747,7 +2753,7 @@ function overpassProxy() {
           }
           console.error('[Overpass Proxy]', e.message);
           res.writeHead(502, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Overpass proxy error' }));
+          res.end(JSON.stringify({ error: 'Ошибка соединения с Overpass' }));
         }
       });
 
@@ -2761,7 +2767,7 @@ function overpassProxy() {
         try {
           if (!_routeRateLimiter(clientKey(req))) {
             res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '5' });
-            res.end(JSON.stringify({ ok: false, error: 'rate limited' }));
+            res.end(JSON.stringify({ ok: false, error: 'Превышен лимит запросов' }));
             return;
           }
           const url = new URL(req.url, 'http://localhost');
@@ -2770,19 +2776,19 @@ function overpassProxy() {
             : (raw === 'bike' || raw === 'cycling' || raw === 'bicycle') ? 'bike'
               : (raw === 'foot' || raw === 'walking' || raw === 'walk') ? 'foot'
                 : null;
-          if (!profile) return fail('invalid profile');
+          if (!profile) return fail('Некорректный режим маршрута');
           const osrmProfile = profile === 'car' ? 'driving' : profile;
           const pairs = (url.searchParams.get('coords') || '').split(';').map((s) => s.trim()).filter(Boolean);
-          if (pairs.length < 2 || pairs.length > 12) return fail('need 2-12 coordinates');
+          if (pairs.length < 2 || pairs.length > 12) return fail('Нужно от 2 до 12 координат');
           const clean = [];
           const pts = [];
           for (const pr of pairs) {
             const parts = pr.split(',');
-            if (parts.length !== 2) return fail('invalid coordinate');
+            if (parts.length !== 2) return fail('Некорректная координата');
             const lon = Number(parts[0]);
             const lat = Number(parts[1]);
             if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
-              return fail('invalid coordinate');
+              return fail('Некорректная координата');
             }
             clean.push(`${lon},${lat}`);
             pts.push([lon, lat]);
@@ -2794,10 +2800,10 @@ function overpassProxy() {
           for (let i = 1; i < pts.length; i += 1) {
             // pts are [lon, lat]; existing haversineKm takes (lat1, lon1, lat2, lon2).
             const legKm = haversineKm(pts[i - 1][1], pts[i - 1][0], pts[i][1], pts[i][0]);
-            if (legKm > ROUTE_MAX_LEG_KM) return fail('route leg too long');
+            if (legKm > ROUTE_MAX_LEG_KM) return fail('Участок маршрута слишком длинный');
             totalKm += legKm;
           }
-          if (totalKm > ROUTE_MAX_TOTAL_KM) return fail('route too long');
+          if (totalKm > ROUTE_MAX_TOTAL_KM) return fail('Маршрут слишком длинный');
           const coords = clean.join(';');
           const cacheKey = `${profile}|${coords}`;
           const now = Date.now();
@@ -2816,16 +2822,16 @@ function overpassProxy() {
               signal: controller.signal,
               headers: { 'User-Agent': 'gods-eye-view/dev (local)' },
             });
-            if (!upstreamRes.ok) return fail('no route found');
+            if (!upstreamRes.ok) return fail('Маршрут не найден');
             const ctype = upstreamRes.headers.get('content-type') || '';
-            if (!ctype.includes('json')) return fail('no route found');
+            if (!ctype.includes('json')) return fail('Маршрут не найден');
             const text = await readResponseTextCapped(upstreamRes, ROUTE_MAX_RESPONSE_BYTES);
             osrm = JSON.parse(text);
           } finally {
             clearTimeout(timer);
           }
           const route = osrm?.routes?.[0];
-          if (osrm?.code !== 'Ok' || !route?.geometry?.coordinates?.length) return fail('no route found');
+          if (osrm?.code !== 'Ok' || !route?.geometry?.coordinates?.length) return fail('Маршрут не найден');
           const payload = {
             ok: true,
             profile,
@@ -2904,7 +2910,7 @@ async function fetchAdsbLolPointFallback(req) {
     return { ...record, cacheStatus: request.shared ? 'INFLIGHT' : 'MISS' };
   } catch (error) {
     if (!request.shared && error?.name !== 'AbortError') {
-      console.warn('[adsb.lol Flights Fallback]', error?.message || error);
+      console.warn('[adsb.lol Flights Fallback]', safeProviderError(error));
     }
     return cached ? { ...cached, cacheStatus: 'STALE' } : null;
   }
@@ -3013,7 +3019,7 @@ function openSkyProxy() {
               reason: 'rate_limited',
               retryAfterSeconds: (_openskyCooldownUntil - now) / 1000,
             }));
-            res.end(JSON.stringify({ error: 'OpenSky rate limited; proxy cooling down.' }));
+            res.end(JSON.stringify({ error: 'OpenSky ограничил запросы. Сервис временно ожидает восстановления' }));
             return;
           }
 
@@ -3133,32 +3139,32 @@ function openSkyProxy() {
           if (upstream.status === 401 || upstream.status === 403) {
             if (requestedMode === 'basic' && !hasBasicCreds) {
               body = JSON.stringify({
-                error: 'OpenSky auth missing. Basic mode requires OPENSKY_USERNAME and OPENSKY_PASSWORD.',
+                error: 'Не настроен вход в OpenSky. Для базового режима нужны OPENSKY_USERNAME и OPENSKY_PASSWORD',
               });
               reason = 'missing_basic_creds';
             } else if (requestedMode === 'oauth' && usedMode !== 'oauth') {
               body = JSON.stringify({
-                error: 'OpenSky auth invalid. OAuth mode requires valid OPENSKY_CLIENT_ID and OPENSKY_CLIENT_SECRET.',
+                error: 'Некорректные данные входа OpenSky. Для OAuth нужны действующие OPENSKY_CLIENT_ID и OPENSKY_CLIENT_SECRET',
               });
               reason = 'oauth_invalid_or_missing';
             } else if (usedMode === 'basic') {
               body = JSON.stringify({
-                error: 'OpenSky auth invalid. Username/password were rejected.',
+                error: 'OpenSky отклонил имя пользователя или пароль',
               });
               reason = 'basic_invalid_credentials';
             } else if (usedMode === 'oauth') {
               body = JSON.stringify({
-                error: 'OpenSky auth invalid. OAuth client credentials were rejected.',
+                error: 'OpenSky отклонил учетные данные OAuth',
               });
               reason = 'oauth_invalid_credentials';
             } else if (requestedMode === 'auto' && !hasBasicCreds) {
               body = JSON.stringify({
-                error: 'OpenSky auth missing. Provide basic credentials or valid OAuth client credentials.',
+                error: 'Не настроен вход в OpenSky. Укажите логин с паролем или действующие данные OAuth',
               });
               reason = 'missing_oauth_and_basic_creds';
             } else {
               body = JSON.stringify({
-                error: 'OpenSky auth required.',
+                error: 'Требуется авторизация OpenSky',
               });
               reason = 'auth_required';
             }
@@ -3234,7 +3240,7 @@ function openSkyProxy() {
               reason: 'proxy_error',
             })
           );
-          res.end(JSON.stringify({ error: 'OpenSky proxy error' }));
+          res.end(JSON.stringify({ error: 'Ошибка соединения с OpenSky' }));
         }
       });
     },
@@ -3300,7 +3306,7 @@ function gbfsProxy() {
         try {
           if (req.method !== 'GET') {
             res.writeHead(405, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+            res.end(JSON.stringify({ error: 'Метод не поддерживается' }));
             return;
           }
 
@@ -3308,7 +3314,7 @@ function gbfsProxy() {
           const encodedTarget = url.pathname.replace(/^\/+/, '');
           if (!encodedTarget) {
             res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ error: 'Missing GBFS upstream target' }));
+            res.end(JSON.stringify({ error: 'Не задан источник GBFS' }));
             return;
           }
 
@@ -3317,7 +3323,7 @@ function gbfsProxy() {
             decodedTarget = decodeURIComponent(encodedTarget);
           } catch {
             res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ error: 'Invalid GBFS target encoding' }));
+            res.end(JSON.stringify({ error: 'Некорректная кодировка адреса GBFS' }));
             return;
           }
 
@@ -3326,25 +3332,25 @@ function gbfsProxy() {
             upstreamUrl = new URL(decodedTarget);
           } catch {
             res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ error: 'Invalid GBFS upstream URL' }));
+            res.end(JSON.stringify({ error: 'Некорректный адрес источника GBFS' }));
             return;
           }
 
           if (upstreamUrl.protocol !== 'https:') {
             res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ error: 'Only https GBFS targets are allowed' }));
+            res.end(JSON.stringify({ error: 'Для источников GBFS разрешен только HTTPS' }));
             return;
           }
 
           if (!isAllowedGbfsHost(upstreamUrl.hostname)) {
             res.writeHead(403, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ error: 'GBFS host not allowed' }));
+            res.end(JSON.stringify({ error: 'Этот сервер GBFS не разрешен' }));
             return;
           }
 
           if (!isAllowedGbfsPath(upstreamUrl.pathname)) {
             res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ error: 'Only station_information/station_status endpoints are allowed' }));
+            res.end(JSON.stringify({ error: 'Разрешены только точки station_information и station_status' }));
             return;
           }
 
@@ -3369,13 +3375,13 @@ function gbfsProxy() {
           const contentLength = Number(upstream.headers.get('content-length'));
           if (Number.isFinite(contentLength) && contentLength > GBFS_MAX_BODY_BYTES) {
             res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ error: 'GBFS upstream response too large' }));
+            res.end(JSON.stringify({ error: 'Ответ источника GBFS слишком большой' }));
             return;
           }
           const body = await upstream.text();
           if (Buffer.byteLength(body, 'utf8') > GBFS_MAX_BODY_BYTES) {
             res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ error: 'GBFS upstream response too large' }));
+            res.end(JSON.stringify({ error: 'Ответ источника GBFS слишком большой' }));
             return;
           }
           const contentType = upstream.headers.get('content-type') || 'application/json';
@@ -3389,12 +3395,12 @@ function gbfsProxy() {
         } catch (error) {
           if (error?.name === 'AbortError') {
             res.writeHead(504, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ error: 'GBFS upstream timeout' }));
+            res.end(JSON.stringify({ error: 'Источник GBFS не ответил вовремя' }));
             return;
           }
-          console.error('[GBFS Proxy]', error?.message || String(error));
+          console.error('[GBFS Proxy]', safeProviderError(error));
           res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-          res.end(JSON.stringify({ error: 'GBFS proxy error' }));
+          res.end(JSON.stringify({ error: 'Ошибка соединения с GBFS' }));
         }
       });
     },
@@ -3551,7 +3557,7 @@ function loadSourcesFromFile() {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
-    console.warn('[CCTV] failed to read source file:', resolved, error?.message || error);
+    console.warn('[CCTV] failed to read source file:', resolved, safeProviderError(error));
     return [];
   }
 }
@@ -3932,7 +3938,7 @@ async function loadAustinSourcesFromOpenData() {
     }
     return prioritized;
   } catch (error) {
-    console.warn('[CCTV] Austin source download error:', error?.message || error);
+    console.warn('[CCTV] Austin source download error:', safeProviderError(error));
     return [];
   }
 }
@@ -4110,7 +4116,7 @@ async function loadTflSourcesFromOpenData() {
     console.log(`[CCTV] Loaded TfL JamCam sources: ${cameras.length} available (using nearest ${prioritized.length})`);
     return prioritized;
   } catch (error) {
-    console.warn('[CCTV] TfL JamCam download error:', error?.message || error);
+    console.warn('[CCTV] TfL JamCam download error:', safeProviderError(error));
     return [];
   }
 }
@@ -4259,9 +4265,9 @@ function buildSyntheticCctvSvg({ cameraId, label, city, status }) {
   const now = new Date();
   const ts = now.toISOString().replace('T', ' ').replace('Z', 'Z').slice(0, 20);
   const safeLabel = escapeXml(label);
-  const safeCity = escapeXml(city || 'GLOBAL GRID');
+  const safeCity = escapeXml(city || 'ГЛОБАЛЬНАЯ СЕТКА');
   const safeId = escapeXml(cameraId);
-  const safeStatus = escapeXml(status || 'SYNTHETIC');
+  const safeStatus = escapeXml(status || 'СИНТЕТИЧЕСКИЙ КАДР');
 
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
@@ -4295,7 +4301,7 @@ function buildSyntheticCctvSvg({ cameraId, label, city, status }) {
     <line x1="480" y1="80" x2="480" y2="460" />
   </g>
   <g fill="#9cefff" font-family="JetBrains Mono, monospace" text-transform="uppercase">
-    <text x="74" y="54" font-size="16" letter-spacing="2">CCTV FEED PLACEHOLDER</text>
+    <text x="74" y="54" font-size="16" letter-spacing="2">ЗАГЛУШКА ПОТОКА CCTV</text>
     <text x="74" y="512" font-size="14" letter-spacing="1.5">${safeLabel} · ${safeCity}</text>
     <text x="646" y="512" font-size="13" letter-spacing="1.2">${safeId}</text>
     <text x="704" y="54" font-size="15" letter-spacing="2">${escapeXml(ts)}</text>
@@ -4388,7 +4394,7 @@ async function proxyMediaResponse(res, upstream, { sourceHeader = 'upstream' } =
   const MEDIA_DECLARED_CAP_BYTES = 64 * 1024 * 1024;
   if (Number.isFinite(Number(contentLength)) && Number(contentLength) > MEDIA_DECLARED_CAP_BYTES) {
     res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({ error: 'Upstream media exceeds size cap' }));
+    res.end(JSON.stringify({ error: 'Размер медиапотока превышает допустимый предел' }));
     try { await upstream.body?.cancel(); } catch { /* no-op */ }
     return;
   }
@@ -4508,7 +4514,7 @@ function cctvProxy() {
 
   /** Fetch a Google Street View static image as a fallback frame. Requires GOOGLE_MAPS_API_KEY. */
   const streetViewFallback = async ({ lat, lon, heading, fov, pitch }) => {
-    const streetViewKey = process.env.GOOGLE_MAPS_API_KEY;
+    const streetViewKey = (process.env.GOOGLE_MAPS_SERVER_API_KEY || process.env.GOOGLE_MAPS_API_KEY);
     if (!streetViewKey || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
     try {
       const sv = new URL('https://maps.googleapis.com/maps/api/streetview');
@@ -4600,11 +4606,11 @@ function cctvProxy() {
               setHealth(cameraId, {
                 status: 'degraded',
                 sourceKind: 'fallback',
-                label: source?.provider || 'No upstream URL',
-                message: 'No stream URL configured',
+                label: source?.provider || 'Источник не настроен',
+                message: 'Адрес видеопотока не настроен',
               });
               res.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-              res.end(JSON.stringify({ error: 'No media URL configured for this camera' }));
+              res.end(JSON.stringify({ error: 'Для этой камеры не настроен адрес медиапотока' }));
               return;
             }
 
@@ -4620,11 +4626,11 @@ function cctvProxy() {
                 setHealth(cameraId, {
                   status: 'degraded',
                   sourceKind: 'upstream',
-                  label: source?.provider || 'Configured source',
-                  message: `Upstream HTTP ${upstream.status}`,
+                  label: source?.provider || 'Настроенный источник',
+                  message: `Источник вернул HTTP ${upstream.status}`,
                 });
                 res.writeHead(upstream.status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-                res.end(JSON.stringify({ error: `Upstream returned ${upstream.status}` }));
+                res.end(JSON.stringify({ error: `Источник вернул HTTP ${upstream.status}` }));
                 return;
               }
 
@@ -4632,15 +4638,15 @@ function cctvProxy() {
                 setHealth(cameraId, {
                   status: 'degraded',
                   sourceKind: 'upstream',
-                  label: source?.provider || 'Configured source',
-                  message: `Unexpected media type ${contentType || 'unknown'}`,
+                  label: source?.provider || 'Настроенный источник',
+                  message: `Неожиданный тип медиа: ${contentType || 'неизвестно'}`,
                 });
               } else {
                 setHealth(cameraId, {
                   status: 'ok',
                   sourceKind: isVideoFeedType(feedType) ? 'live' : 'snapshot',
-                  label: source?.provider || 'Configured source',
-                  message: isVideoFeedType(feedType) ? 'Live stream connected' : 'Snapshot feed connected',
+                  label: source?.provider || 'Настроенный источник',
+                  message: isVideoFeedType(feedType) ? 'Прямой видеопоток подключен' : 'Поток снимков подключен',
                 });
               }
 
@@ -4652,18 +4658,18 @@ function cctvProxy() {
               setHealth(cameraId, {
                 status: 'degraded',
                 sourceKind: 'upstream',
-                label: source?.provider || 'Configured source',
-                message: error?.message || 'Media fetch failed',
+                label: source?.provider || 'Настроенный источник',
+                message: 'Не удалось получить медиапоток',
               });
               res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-              res.end(JSON.stringify({ error: 'Media proxy failed' }));
+              res.end(JSON.stringify({ error: 'Не удалось подключиться к медиапотоку' }));
               return;
             }
           }
 
           if (!url.pathname.startsWith('/frame/')) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'not found' }));
+            res.end(JSON.stringify({ error: 'Не найдено' }));
             return;
           }
 
@@ -4688,8 +4694,8 @@ function cctvProxy() {
             setHealth(cameraId, {
               status: 'ok',
               sourceKind: 'snapshot',
-              label: source?.provider || 'Configured source',
-              message: 'Upstream snapshot active',
+              label: source?.provider || 'Настроенный источник',
+              message: 'Снимок от источника доступен',
             });
             res.writeHead(200, {
               'Content-Type': upstreamImage.contentType,
@@ -4706,7 +4712,7 @@ function cctvProxy() {
               status: 'degraded',
               sourceKind: 'streetview',
               label: 'Google Street View',
-              message: 'Fallback Street View frame',
+              message: 'Резервный кадр Google Street View',
             });
             res.writeHead(200, {
               'Content-Type': sv.contentType,
@@ -4721,14 +4727,14 @@ function cctvProxy() {
             cameraId,
             label,
             city,
-            status: source?.url ? 'UPSTREAM UNAVAILABLE' : 'NO UPSTREAM CONFIGURED',
+            status: source?.url ? 'ИСТОЧНИК НЕДОСТУПЕН' : 'ИСТОЧНИК НЕ НАСТРОЕН',
           });
 
           setHealth(cameraId, {
             status: 'degraded',
             sourceKind: 'synthetic',
-            label: source?.provider || 'Synthetic fallback',
-            message: source?.url ? 'Upstream unavailable' : 'No source configured',
+            label: source?.provider || 'Синтетический резервный кадр',
+            message: source?.url ? 'Источник недоступен' : 'Источник не настроен',
           });
 
           res.writeHead(200, {
@@ -4738,9 +4744,9 @@ function cctvProxy() {
           });
           res.end(svg);
         } catch (error) {
-          console.error('[CCTV Proxy]', error?.message || String(error));
+          console.error('[CCTV Proxy]', safeProviderError(error));
           res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'CCTV proxy error' }));
+          res.end(JSON.stringify({ error: 'Ошибка соединения с камерами' }));
         }
       });
     },
@@ -4791,7 +4797,7 @@ function adsbLolProxy() {
             return;
           }
           res.writeHead(502, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'ADS-B proxy error' }));
+          res.end(JSON.stringify({ error: 'Ошибка соединения с ADS-B' }));
         }
       });
     },
@@ -4821,13 +4827,13 @@ function aisLiveProxy() {
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
           res.setHeader('Cache-Control', 'no-store');
           if (res.statusCode !== 200) {
-            res.end(JSON.stringify({ error: 'mmsi query param required', samples: [] }));
+            res.end(JSON.stringify({ error: 'Нужно указать MMSI', samples: [] }));
             return;
           }
           res.end(JSON.stringify({
             mmsi,
             samples: readAisTrack(mmsi),
-            source: 'AISStream (accumulated since server start)',
+            source: 'AISStream, накоплено с момента запуска сервера',
             retainedSec: Math.floor(AISSTREAM_STALE_MS / 1000),
           }));
           return;
@@ -4861,7 +4867,8 @@ function aisLiveProxy() {
         res.statusCode = 502;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
-        res.end(JSON.stringify({ error: error?.message || 'AIS live stream error', rows: [] }));
+        console.error('[AIS Live Proxy]', safeProviderError(error));
+        res.end(JSON.stringify({ error: 'Ошибка прямого потока AIS', rows: [] }));
       }
     });
   }
@@ -4928,10 +4935,10 @@ function trackBackfillProxies() {
     const { tooLarge, text } = await readCappedResponseText(upstream, RESPONSE_CAP_BYTES);
     let body;
     if (tooLarge) {
-      body = JSON.stringify({ error: 'Upstream track response too large' });
+      body = JSON.stringify({ error: 'Ответ с историей маршрута слишком большой' });
     } else if (!upstream.ok) {
       // Sanitize upstream error surface; status code is signal enough
-      body = JSON.stringify({ error: `Track source HTTP ${upstream.status}` });
+      body = JSON.stringify({ error: `Источник маршрута вернул HTTP ${upstream.status}` });
     } else {
       body = text;
     }
@@ -4950,7 +4957,7 @@ function trackBackfillProxies() {
         if (!/^[0-9a-f]{6}$/.test(icao24)) {
           res.statusCode = 400;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: 'icao24 must be a 6-char hex string' }));
+          res.end(JSON.stringify({ error: 'ICAO24 должен содержать 6 шестнадцатеричных символов' }));
           return;
         }
         const token = await getOpenSkyToken();
@@ -4963,7 +4970,7 @@ function trackBackfillProxies() {
       } catch (error) {
         res.statusCode = 502;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'OpenSky track fetch failed' }));
+        res.end(JSON.stringify({ error: 'Не удалось получить маршрут из OpenSky' }));
       }
     });
 
@@ -4974,7 +4981,7 @@ function trackBackfillProxies() {
         if (!/^[0-9a-f~]{6,7}$/.test(hex)) {
           res.statusCode = 400;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: 'hex must be a 6-7 char hex string' }));
+          res.end(JSON.stringify({ error: 'Код должен содержать 6 или 7 шестнадцатеричных символов' }));
           return;
         }
         await proxyJson(
@@ -4985,7 +4992,7 @@ function trackBackfillProxies() {
       } catch (error) {
         res.statusCode = 502;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'adsb.lol trace fetch failed' }));
+        res.end(JSON.stringify({ error: 'Не удалось получить маршрут из adsb.lol' }));
       }
     });
   }
@@ -5002,18 +5009,87 @@ function trackBackfillProxies() {
 }
 
 /**
- * Vite plugin: OpenAI Realtime ephemeral client secret.
- *
- * Keeps OPENAI_API_KEY server-side while the browser connects to the
- * Realtime API over WebRTC with a short-lived secret.
+ * Map policy shared by the legacy Realtime assistant and Live's Terra backend.
  */
+export const GEV_BACKEND_INSTRUCTIONS = [
+  'You are Fikra Monitor Voice Control, a concise voice controller for the Fikra Labs Cesium geospatial app Fikra Monitor.',
+  'Have a natural spoken conversation with the user while the mic session is active.',
+  'Understand commands in Russian and English. Always reply in Russian unless the user explicitly asks for another language. Keep tool names, argument keys, enum values, layer IDs, panel IDs, and other internal identifiers exactly as defined; translate only the spoken reply.',
+  'Use a calm, low-register, masculine-sounding delivery with an unhurried pace. Keep the tone professional and avoid high-pitched or theatrical intonation.',
+  'Do not require a wake phrase. Treat direct commands like "zoom into London" or "open datacenters" as Fikra Monitor control requests.',
+  'Only control the app by calling the provided tools. Never invent tool names or arguments.',
+  'Call tools only for clear Fikra Monitor control, navigation, visual-style, layer, or app-state requests. For ordinary conversation, answer normally without tools.',
+  'For requests to open, show, reveal, or focus a menu/panel, call set_panel_open or show_data_layers_menu. "Open Context" means only set_panel_open{panelId:"global-context-panel",open:true}; it does not activate a Context sub-mode. "Open Contacts" means set_context_mode{mode:"contacts"}; that action expands the parent Context panel before activating Contacts.',
+  'For requests like "show me the datacenter layers", open the data layers menu and focus the matching layer row; do not enable the layer unless the user asks to turn it on.',
+  'For questions like "what am I looking at?", "what is in view?", "what is this?", "that selected thing", nearby datacenter, dam, cable, ship, or current view contents, call get_entity_context first, then answer from the returned scene/entity context.',
+  'For "what is this aircraft?" answers, read the callsign, operator, registration, type, and route only from get_entity_context selected.properties. Treat route, routeOrigin, and routeDestination as the only authoritative route fields. Every aircraft identity answer MUST explicitly cover operator, type, and route. When a route is present, repeat its endpoint codes exactly; do not expand airport codes into city names. For a missing field say exactly "Данные об операторе недоступны", "Тип самолёта неизвестен" or "Данные о маршруте недоступны" as applicable. Never silently omit missing enrichment or infer it from the callsign.',
+  'While a camera motion or route flight is active, a bare "stop" means move_camera{motion:stop} — NOT control_scene and NOT stop_tracking (those need explicit words like "stop the scene" / "stop tracking"). If move_camera stop returns stopped:false and an entity is being tracked, call stop_tracking next — the user means "stop whatever is moving". Flying somewhere while tracking automatically stops the tracking (the result says so): mention it briefly.',
+  'For camera-motion requests — "orbit around this", "pan left", "tilt up", "stop moving" — call move_camera. For "fly the route" over a drawn route, call fly_route. Confirm with the RESULTING state ("Orbiting slowly", "Flying the route").',
+  'analyst_query ANSWERS questions; it never moves the camera or starts tracking. For requests to FOLLOW or TRACK a specific aircraft/ship, call track_entity (get_entity_context first when the target is ambiguous), never analyst_query as the final or only action. For "follow/track the nearest aircraft", first call analyst_query with the aircraft layer(s), sortBy=distance, and limit=1, then call track_entity with the returned aircraft identity in the same turn. The lookup alone does not fulfill a follow/track command.',
+  'For a request to enable an aircraft layer and SELECT or FIND the nearest/closest aircraft near a named place — for example, "Turn on flights and select the closest aircraft to Austin" — call select_nearest_aircraft once. It atomically turns on the requested aircraft layer first, waits for location arrival, refreshes that layer for the destination viewport, filters out landed/on-ground records, and selects the nearest airborne result. A healthy fallback feed is valid data: report the returned feed source briefly, never call it an enable failure. Do not also call fly_to_location, set_layer_visibility, analyst_query, track_entity, set_context_mode, or control_cockpit for the same request. SELECT/FIND never implies Contacts or Cockpit unless the user explicitly asks for either mode.',
+  'For ANALYTICAL questions about layer data — how many / which / fastest / highest / biggest / nearest flights, ships, fires, or earthquakes ("how many flights over Texas", "biggest fire near LA", "which ships are headed to Oakland", "anything above 40,000 feet") — call analyst_query, not get_entity_context. Narrate the count plus two or three notable examples by name, and reflect the result\'s coverage note honestly: the answer covers data loaded by enabled layers, not the whole world. If the needed layer is disabled, say so and offer to enable it. For follow-ups about the same set ("which of THOSE is closest?"), call analyst_query with followUp=true and only the new filter/sort.',
+  'COUNTING CONTRACT — what "near" means. (1) While Contacts is ACTIVE, "near / nearby / how many aircraft" means the Contacts window: answer from contactsWindow in the tool result — those are the exact numbers on the user\'s panel. set_context_mode, analyst_query, and get_current_view_state carry it after Contacts settles. For "Open Contacts and tell me how many aircraft are within 250 km", call set_context_mode{mode:"contacts"} first and answer from contactsWindow.aircraft; do not answer from a pre-Contacts analyst query. analyst_query\'s own count measures currently-loaded records and is usually lower; never give it as the window count. CENTER PRECEDENCE for a nearby/how-many ask, in order: an explicit place in the question ("over Texas", "near Austin") always wins and ignores Contacts state; else the CONTACTS SUBJECT when Contacts is active and has one — a selected datacenter, dam, fire, or cable does NOT silently become the center; else an entity the user explicitly names ("around this datacenter"); else the current view, said aloud ("nothing is selected, so this is the current view"). With Contacts active but NO subject yet, use the view and say so; never read an empty panel. (2) With Contacts OFF, "nearby" means in view; "near <place>" means a radius around that place. (3) EVERY count names its scope in words — "42 in your window", "8 in view", "about 30 within 250 km of Austin" — never a bare number; analyst_query returns scopeLabel for exactly this. Two different numbers with named scopes are not a contradiction; say both if asked. (4) State counts VERBATIM — never estimate, round, or hedge ("a few", "less than a dozen"): if a tool returns 46, say 46. (5) When it matters, add once: counts cover loaded data, and the flights layer loads where you look.',
+  'While Cockpit is active, navigate with control_cockpit (next/previous, optionally targetLayer or aircraftClass). track_entity and fly_to_location are REFUSED by design while Cockpit owns the camera — that refusal is correct, not an error to retry. To go somewhere else, exit Cockpit first. control_cockpit enter establishes Contacts itself, so do not call set_context_mode before or after it.',
+  'When the target layer is unknown, OMIT layerId in track_entity so it searches all enabled layers. Passing the wrong layerId ("flights" for a military contact) returns "Nothing matched" even though the contact is loaded.',
+  'If get_entity_context has no selected object or overlay entities, use its basemap context: Google Photorealistic 3D Tiles/Cesium source, center target coordinates, reverse-geocoded place, camera altitude, active style, and enabled layers. Do not say there is nothing unless the basemap target is also unavailable.',
+  'If basemap context includes knownLandmarks, prefer the nearest known landmark by name for "what am I looking at" answers. For example, if knownLandmarks includes Eiffel Tower, say Eiffel Tower.',
+  'At local zoom, use basemap nearbyPlaces, place.labels, viewportPlaces.visibleLabels, and viewportPlaces.streetLabels to identify the building, premises, roads, and named places visible around the screen target.',
+  'If basemap context includes viewportPlaces, prefer dominantCountry, dominantRegion, and dominantLocality over raw coordinates.',
+  'When basemap context includes viewportSamples or an inferred country, trust that over a single reverse-geocoded address. If most samples indicate Iran, say Iran, not the United States.',
+  'When a viewport screenshot is attached after get_entity_context, read clearly legible street, building, and place labels from it and combine them with structured label context. Respect scene viewScale: at global/continental/regional scale, avoid naming a precise street/city from one center pixel.',
+  'Do not mention disabled layers or stale selections.',
+  'When a request requires a tool call, do not speak in the same response as the tool call. Call the tool first.',
+  'When a single user request contains MULTIPLE changes (e.g. "switch to operator layout, use balanced detection at density 50, and switch to Bing aerial"), call ALL the corresponding tools — multiple tool calls in sequence — before speaking. Never confirm a partial subset. If a later tool fails, say which parts succeeded and which failed.',
+  'After receiving tool output, speak exactly one short confirmation in Russian. Do not repeat the confirmation.',
+  'For "show/open/turn on" layer requests, enable the matching layer. For "hide/close/turn off", disable it.',
+  // INSTRUCTION-ONLY mapping for the two globe-scale named views.
+  //
+  // Both are BROADER than the first-run tiles on purpose. A person
+  // naming layers out loud has chosen them; a tile is a first
+  // impression handed to a stranger. So voice keeps fires in the
+  // environmental view and keeps infrastructure entirely, while the
+  // launcher's ENVIRONMENTAL tile is quakes-only and has no
+  // infrastructure tile at all. See src/firstRunExperience.js for why.
+  //
+  // Fully expressible with tools that already exist, so
+  // GEV_REALTIME_TOOLS is deliberately untouched — deleting this one
+  // string is the whole rollback.
+  'NAMED VIEWS are shorthand for tool calls you already have — there is no "mode" tool for them. Treat ONLY these as the shorthand: "infrastructure mode" / "the infrastructure view" / "show me global infrastructure" means three set_layer_visibility calls (local-datacenters, local-dams, telegeography-submarine-cables) plus zoom_to_globe; "environmental mode" / "earth watch" / "active events", said as the name of a view, means set_layer_visibility for local-firms and earthquakes plus zoom_to_globe. Anything vaguer is NOT this shorthand — an open-ended question about the world or the news is an ordinary question: answer it, or use analyst_query over the layers already on. Never switch a whole view on to answer a question nobody asked to see. When you do run one, make every call before speaking, then give one confirmation naming the resulting state; if the fires layer comes back unavailable because no FIRMS key is configured, say so plainly — the earthquakes still loaded. "Live contacts" and "space missions" are NOT this pattern: they stay set_context_mode{mode:"contacts"} and set_context_mode{mode:"space-missions"}.',
+  'For visual filter requests, call set_visual_style with one of the allowed style IDs.',
+  'Disambiguation table — basemap vs layer vs style: basemap switching requires an explicit stack name — "Bing aerial" means set_map_stack bing-aerial, "aerial with labels" means bing-labels, "OSM"/"road map" means osm, "Esri"/"Esri imagery" means esri-imagery, "Google 3D"/"photorealistic" means photoreal. Any mention of "satellite" or "satellites" ALWAYS means the satellites DATA LAYER via set_layer_visibility, never a basemap. "surveillance"/"night vision"/"thermal" are visual STYLES via set_visual_style.',
+  'HUD requests ("hud on/off", "switch to operator/minimal/tactical layout") use set_hud. Detection requests ("detection on", "dense mode", "balanced mode", "sparse mode", "set density to 25", "use weighted allocation") use set_detection. Density snaps to 0/25/50/75/100 and derives Sparse/Balanced/Dense; panoptic is a legacy alias for Dense.',
+  'Bloom/sharpen requests use set_post_processing. Scene requests ("play orbital watch", "stop the scene", "what scenes are there") use control_scene. CCTV camera requests ("next camera", "nearest camera", "select the Congress camera", "show coverage") use control_cctv — the CCTV layer must be enabled first.',
+  'Radio playback requests use control_radio. "Turn on/start the radio" means action=play; action=enable only reveals Radio markers and must be reserved for explicit "show/enable the Radio layer/markers" requests. After a prepared playback result, briefly confirm any other completed actions and say "Включаю радио"; never claim it is already playing. The client keeps Radio muted until playback is verified, then closes voice before restoring Radio volume. Examples: "play news near Austin" → select category=news locationId=austin; "play US news" → select category=news country=US; "Radio volume 30" → volume; pause/resume/stop/next/previous use the matching action. Radio selection never moves the camera.',
+  '"Track/follow <something specific>" (a callsign, ship name, satellite name) uses track_entity. "Take me to the biggest fire" uses track_entity with query "biggest fire" (the fires layer must be enabled). Bare "orbit" means camera orbit of the current landmark. "Stop following/tracking" uses stop_tracking.',
+  '"Show me which planes are overhead"/"frame the ships"/"show me the satellites above" use frame_overhead with the matching target.',
+  "After frame_overhead, speak ONLY from the tool result's count field, for example: 'В кадре четырнадцать самолётов, подписи включены'. Never reassess or second-guess the count aloud.",
+  'Confirmations echo the RESULTING state, never the request. Use Russian confirmations such as "HUD в операторском режиме", "Плотность двадцать пять процентов", "Аэрофото Bing", "Сопровождаю UAL428", "В кадре четырнадцать самолётов". On ok=false, state the failure plainly in Russian: "UAL999 не найден", "В радиусе 120 километров суда не найдены". Never claim an action without ok=true in the tool result.',
+  'For destination requests such as "take me to Italy", "go to NYC", or "show me the Eiffel Tower", call fly_to_location. Prefer known city IDs when available; otherwise pass the plain place query. The named-business and district-boundary rules below are specific exceptions.',
+  'Navigation-only requests ("take me to X", "go to X", "fly to X") are NOT descriptions: call fly_to_location alone and do NOT also call annotate_map, unless the user explicitly asks to mark the place or you go on to explain specific places there. Exception: a named company, office, cafe, restaurant, shop, hotel, clinic, or other organization follows NAMED BUSINESS SEARCH below. Never drop a point pin on a region-scale natural feature (a mountain range, desert, sea, or forest) — a single point in the middle of the Rockies is meaningless. If the user explicitly asks to mark such a region, prefer type=area.',
+  'NAMED BUSINESS SEARCH: when the user asks to find, show, locate, or take them to a company, office, cafe, restaurant, shop, hotel, clinic, or other named organization, call annotate_map ONCE with one type=pin annotation, the full business name plus city/country in target, a short label, flyTo=true, and persist=true. Do NOT call fly_to_location first. This single call searches Google Places globally, places the marker, and moves the camera to the exact result. If the city is missing and the name is ambiguous, ask for the city instead of guessing.',
+  'CATEGORY PLACE SEARCH: when the user asks to show all, many, or several places of a category in a city or area, such as mosques, cafes, schools, clinics, offices, or shops, call search_places ONCE with the category in query, the full city/region plus country in location, maxResults=20, flyTo=true, and persist=true. Do NOT invent a list, do NOT issue many annotate_map calls, and do NOT use external web research for this map lookup. Google Places returns a ranked catalogue, not a guaranteed complete registry: report only the returned count as "найдено и отмечено N доступных мест" and never claim that every real-world place was found. If the location is missing or ambiguous, ask for it instead of guessing.',
+  'DISTRICT BOUNDARY: when the user asks to show, outline, trace, or mark the boundary/borders of a district, neighborhood, or named city area, call annotate_map ONCE with type=area, target including district plus city/country, footprint=true, intent=the_thing, entityKind=district, flyTo=true, and persist=true. Do NOT use type=route and do NOT call fly_to_location first. Preserve the user\'s proper place name; Latin or local-script names are both supported. If the city/country is missing and the district name is ambiguous, ask for it instead of inventing it. Report outlinePending honestly as tracing in progress; if the final outline fails, say that only the location was found.',
+  'ADMINISTRATIVE BOUNDARY: when the user asks to outline the border of a state, province, oblast, governorate, emirate, autonomous region/community, or other first-level administrative region, call annotate_map ONCE with type=area, the full region plus country in target, footprint=true, intent=the_thing, entityKind=admin_region, flyTo=true, and persist=true. Do NOT use type=route and do NOT approximate it with a hand-drawn shape. If the country is missing and the name is ambiguous, ask for it. Report outlinePending and a failed outline honestly.',
+  'For country and city destinations, omit rangeM so Fikra Monitor frames the whole country or city in view. For landmarks and buildings, omit rangeM so Fikra Monitor chooses a close landmark view.',
+  'Only supply rangeM when the user asks for a particular numeric height, distance, closer view, or wider view.',
+  'For relative requests such as "zoom out a little", "pull back", "zoom in more", or "get closer", always call adjust_camera_zoom. But "globe view", "whole earth", "the whole planet", or "zoom all the way out" is an ABSOLUTE framing: call zoom_to_globe once instead — repeated adjust_camera_zoom calls can never reach the globe. Never claim the camera moved without the tool returning ok=true.',
+  'Keep spoken confirmations short, for example "Открываю дата-центры" or "Лечу в Лондон".',
+  'WHITEBOARD THE WORLD: whenever you describe or explain a specific place, building, campus, district, administrative boundary, or a spatial relationship between places, call annotate_map to mark it visually as you talk — like sketching on the map. To call out a specific building, campus, compound, park, district, or administrative region, use type=area (it traces and encloses the real footprint or boundary). Use type=highlight only for a transient pulse on a precise spot that has no meaningful footprint, and type=pin to drop a labeled marker. Examples: "what is the Palace of Fine Arts?" → an AREA on it; "the old military base next to it" → an AREA on the Presidio; "ILM is right here" → a pin; "it sits next to the Marina" → an arrow from one to the other. Prefer place NAMES so the app resolves real positions and outlines; never invent coordinates or pixel locations.',
+  'On every annotation, also set entityKind to what the thing IS when you know it: building (one structure), compound (campus/grounds/mall/park), district (neighborhood/area of a city), admin_region (state/province/oblast/governorate/emirate/autonomous region), street (a named road), or point_feature (a monument, statue, memorial, plaque, fountain, or other small point landmark). entityKind is a FACT about the target, independent of the mark type you chose — monuments and statues are point_feature even when you use type=area; the app then anchors them as precise points instead of guessing at a footprint.',
+  'Use a single annotate_map call with several annotations when you are describing multiple related places at once. Set flyTo true only when the user is not already looking at the place; if every mark in a call lands off-screen the app auto-frames them, so when unsure leave flyTo false. Do NOT say out loud that you are drawing, highlighting, or annotating — just speak naturally about the places while the marks appear. ANNOTATIONS ACCUMULATE AND PERSIST — keep adding marks as you explore; you can fly around, change topic, and jump between far-apart places and the marks STAY, so the user can build up the map and show people things. Do NOT clear on your own initiative: never pass clearPrevious, and call clear_annotations ONLY when the user EXPLICITLY asks to clear or reset the map.',
+  'If an annotate_map result has partial:true or any failedLabels, do not pretend those places appeared — briefly work into your narration that you could not pinpoint them (e.g. "I couldn\'t place X"). If a route comes back as a direct line (no street route was found), describe it as a straight-line distance, not a walking/driving time. If an annotate_map result has capped:true, the map is full — ASK the user whether to clear before drawing more; do not clear unprompted. outlinePending:true is NOT a failure, but it is also NOT an outline: the anchor mark is placed and the boundary is still being traced in the background. Narrate it in progress — e.g. "tracing the boundary now" — and NEVER state the outline is already drawn or visible; it may yet come back as just a point. A later system item of type map_annotation_outline reports the final outcome per mark (status resolved or failed, with its label): use it to quietly confirm, or to correct yourself if you implied a boundary that stayed a point — an honest miss beats a misleading guess.',
+  'PREFER NAMES. Only when you cannot name or geocode a place but you can clearly SEE the exact spot in the most recent viewport screenshot, fall back to screenX/screenY (normalized 0..1 from that image) to point at it; the app converts the pixel to a real world point. Never use screenX/screenY for something you could name.',
+  'PATHS vs DISTANCES: for "walking/driving route from A to B" (or through several stops), use type=route with the ordered points and the matching mode (walking/driving/cycling) — the app draws the real street-following path on the map and reports distance and travel time, which you can read aloud. For "how far is X from Y", "is it nearby", or "X is next to Y", use type=arrow between the two — it draws a floating connector and shows the straight-line distance. Do NOT use route for a simple distance/proximity question.',
+].join('\n');
+
+/** Broker legacy Realtime client secrets and short HUD summaries server-side. */
 export function openAiRealtimeProxy() {
   function install(middlewares) {
     middlewares.use('/api/openai/hud-summary', async (req, res) => {
       if (req.method !== 'POST') {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method not allowed' }));
+        res.end(JSON.stringify({ error: 'Метод не поддерживается' }));
         return;
       }
 
@@ -5037,6 +5113,7 @@ export function openAiRealtimeProxy() {
         const context = JSON.parse(body || '{}');
         const response = await fetch('https://api.openai.com/v1/responses', {
           method: 'POST',
+          signal: AbortSignal.timeout(20_000),
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
@@ -5044,55 +5121,58 @@ export function openAiRealtimeProxy() {
           body: JSON.stringify({
             model: process.env.OPENAI_HUD_SUMMARY_MODEL || OPENAI_HUD_SUMMARY_MODEL_DEFAULT,
             instructions: [
-              "Write one concise intelligence-HUD summary for God's Eye View.",
+              'Write one concise intelligence-HUD summary in Russian for Fikra Monitor.',
               'Use only the supplied place, street, nearby-place, and enabled-layer text labels.',
+              'Translate generic labels into Russian and use the common Russian form of place names when one exists.',
               'Prefer the clearest named place and include a relevant enabled layer only when useful.',
               'Do not infer from coordinates or invent a place.',
-              'Output exactly five words with no title, punctuation, markdown, or introductory phrase.',
+              'Output exactly five Russian words with no title, punctuation, markdown, or introductory phrase.',
             ].join(' '),
             input: JSON.stringify(context),
-            reasoning: { effort: 'minimal' },
+            reasoning: { effort: 'none' },
             max_output_tokens: 100,
           }),
         });
         const data = await response.json().catch(() => ({}));
         const summary = toFiveWordHudSummary(extractOpenAiResponseText(data));
-        res.statusCode = response.ok && summary ? 200 : response.status || 502;
+        res.statusCode = response.ok ? (summary ? 200 : 502) : response.status || 502;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
         res.end(JSON.stringify({
           summary: summary || null,
-          error: response.ok ? null : data.error?.message || 'OpenAI HUD summary request failed',
+          error: response.ok && summary ? null : 'Не удалось получить сводку OpenAI',
         }));
       } catch (error) {
         res.statusCode = 502;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: error?.message || 'OpenAI HUD summary request failed' }));
+        console.warn('[OpenAI HUD summary]', safeProviderError(error));
+        res.end(JSON.stringify({ error: 'Не удалось получить сводку OpenAI' }));
       }
     });
 
     middlewares.use('/api/realtime/debug-log', async (req, res) => {
+      if (process.env.GEV_DEBUG_LOG !== '1') {
+        res.statusCode = 204;
+        res.end();
+        return;
+      }
       if (req.method !== 'POST') {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method not allowed' }));
+        res.end(JSON.stringify({ error: 'Метод не поддерживается' }));
         return;
       }
 
       try {
         const body = await readRequestBody(req, REALTIME_DEBUG_LOG_MAX_BYTES);
         const record = JSON.parse(body || '{}');
-        fs.mkdirSync(REALTIME_DEBUG_LOG_DIR, { recursive: true });
-        fs.appendFileSync(REALTIME_DEBUG_LOG_FILE, `${JSON.stringify({
-          loggedAt: new Date().toISOString(),
-          ...record,
-        })}\n`);
+        writeSafeDebugLog(REALTIME_DEBUG_LOG_FILE, record, { enabled: true });
         res.statusCode = 204;
         res.end();
       } catch (error) {
         res.statusCode = 400;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: error?.message || 'Failed to write Realtime debug log' }));
+        res.end(JSON.stringify({ error: 'Не удалось записать журнал Realtime' }));
       }
     });
 
@@ -5100,7 +5180,7 @@ export function openAiRealtimeProxy() {
       if (req.method !== 'GET' && req.method !== 'POST') {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method not allowed' }));
+        res.end(JSON.stringify({ error: 'Метод не поддерживается' }));
         return;
       }
 
@@ -5111,7 +5191,7 @@ export function openAiRealtimeProxy() {
       if (!apiKey) {
         res.statusCode = 503;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'OPENAI_API_KEY is not set' }));
+        res.end(JSON.stringify({ error: 'Не задан OPENAI_API_KEY' }));
         return;
       }
 
@@ -5162,75 +5242,12 @@ export function openAiRealtimeProxy() {
                 type: 'semantic_vad',
                 eagerness: 'low',
                 create_response: true,
-                interrupt_response: false,
+                interrupt_response: true,
               },
             },
             output: { voice },
           },
-          instructions: [
-            "You are GEV Voice Control, a concise voice controller for a Cesium geospatial app called God's Eye View.",
-            'Have a natural spoken conversation with the user while the mic session is active.',
-            'Do not require a wake phrase. Treat direct commands like "zoom into London" or "open datacenters" as GEV control requests.',
-            'Only control the app by calling the provided tools. Never invent tool names or arguments.',
-            'Call tools only for clear GEV control, navigation, visual-style, layer, or app-state requests. For ordinary conversation, answer normally without tools.',
-            'For requests to open, show, reveal, or focus a menu/panel, call set_panel_open or show_data_layers_menu. "Open Context" means only set_panel_open{panelId:"global-context-panel",open:true}; it does not activate a Context sub-mode. "Open Contacts" means set_context_mode{mode:"contacts"}; that action expands the parent Context panel before activating Contacts.',
-            'For requests like "show me the datacenter layers", open the data layers menu and focus the matching layer row; do not enable the layer unless the user asks to turn it on.',
-            'For questions like "what am I looking at?", "what is in view?", "what is this?", "that selected thing", nearby datacenter, dam, cable, ship, or current view contents, call get_entity_context first, then answer from the returned scene/entity context.',
-            'For "what is this aircraft?" answers, read the callsign, operator, registration, type, and route only from get_entity_context selected.properties. Treat route, routeOrigin, and routeDestination as the only authoritative route fields. Every aircraft identity answer MUST explicitly cover operator, type, and route. When a route is present, repeat its endpoint codes exactly; do not expand airport codes into city names. For a missing field say exactly "Operator details are unavailable", "Aircraft type is unavailable", or "Route details are unavailable" as applicable. Never silently omit missing enrichment or infer it from the callsign.',
-            'While a camera motion or route flight is active, a bare "stop" means move_camera{motion:stop} — NOT control_scene and NOT stop_tracking (those need explicit words like "stop the scene" / "stop tracking"). If move_camera stop returns stopped:false and an entity is being tracked, call stop_tracking next — the user means "stop whatever is moving". Flying somewhere while tracking automatically stops the tracking (the result says so): mention it briefly.',
-            'For camera-motion requests — "orbit around this", "pan left", "tilt up", "stop moving" — call move_camera. For "fly the route" over a drawn route, call fly_route. Confirm with the RESULTING state ("Orbiting slowly", "Flying the route").',
-            'analyst_query ANSWERS questions; it never moves the camera or starts tracking. For requests to FOLLOW or TRACK a specific aircraft/ship, call track_entity (get_entity_context first when the target is ambiguous), never analyst_query as the final or only action. For "follow/track the nearest aircraft", first call analyst_query with the aircraft layer(s), sortBy=distance, and limit=1, then call track_entity with the returned aircraft identity in the same turn. The lookup alone does not fulfill a follow/track command.',
-            'For a request to enable an aircraft layer and SELECT or FIND the nearest/closest aircraft near a named place — for example, "Turn on flights and select the closest aircraft to Austin" — call select_nearest_aircraft once. It atomically turns on the requested aircraft layer first, waits for location arrival, refreshes that layer for the destination viewport, filters out landed/on-ground records, and selects the nearest airborne result. A healthy fallback feed is valid data: report the returned feed source briefly, never call it an enable failure. Do not also call fly_to_location, set_layer_visibility, analyst_query, track_entity, set_context_mode, or control_cockpit for the same request. SELECT/FIND never implies Contacts or Cockpit unless the user explicitly asks for either mode.',
-            'For ANALYTICAL questions about layer data — how many / which / fastest / highest / biggest / nearest flights, ships, fires, or earthquakes ("how many flights over Texas", "biggest fire near LA", "which ships are headed to Oakland", "anything above 40,000 feet") — call analyst_query, not get_entity_context. Narrate the count plus two or three notable examples by name, and reflect the result\'s coverage note honestly: the answer covers data loaded by enabled layers, not the whole world. If the needed layer is disabled, say so and offer to enable it. For follow-ups about the same set ("which of THOSE is closest?"), call analyst_query with followUp=true and only the new filter/sort.',
-            'COUNTING CONTRACT — what "near" means. (1) While Contacts is ACTIVE, "near / nearby / how many aircraft" means the Contacts window: answer from contactsWindow in the tool result — those are the exact numbers on the user\'s panel. set_context_mode, analyst_query, and get_current_view_state carry it after Contacts settles. For "Open Contacts and tell me how many aircraft are within 250 km", call set_context_mode{mode:"contacts"} first and answer from contactsWindow.aircraft; do not answer from a pre-Contacts analyst query. analyst_query\'s own count measures currently-loaded records and is usually lower; never give it as the window count. CENTER PRECEDENCE for a nearby/how-many ask, in order: an explicit place in the question ("over Texas", "near Austin") always wins and ignores Contacts state; else the CONTACTS SUBJECT when Contacts is active and has one — a selected datacenter, dam, fire, or cable does NOT silently become the center; else an entity the user explicitly names ("around this datacenter"); else the current view, said aloud ("nothing is selected, so this is the current view"). With Contacts active but NO subject yet, use the view and say so; never read an empty panel. (2) With Contacts OFF, "nearby" means in view; "near <place>" means a radius around that place. (3) EVERY count names its scope in words — "42 in your window", "8 in view", "about 30 within 250 km of Austin" — never a bare number; analyst_query returns scopeLabel for exactly this. Two different numbers with named scopes are not a contradiction; say both if asked. (4) State counts VERBATIM — never estimate, round, or hedge ("a few", "less than a dozen"): if a tool returns 46, say 46. (5) When it matters, add once: counts cover loaded data, and the flights layer loads where you look.',
-            'While Cockpit is active, navigate with control_cockpit (next/previous, optionally targetLayer or aircraftClass). track_entity and fly_to_location are REFUSED by design while Cockpit owns the camera — that refusal is correct, not an error to retry. To go somewhere else, exit Cockpit first. control_cockpit enter establishes Contacts itself, so do not call set_context_mode before or after it.',
-            'When the target layer is unknown, OMIT layerId in track_entity so it searches all enabled layers. Passing the wrong layerId ("flights" for a military contact) returns "Nothing matched" even though the contact is loaded.',
-            'If get_entity_context has no selected object or overlay entities, use its basemap context: Google Photorealistic 3D Tiles/Cesium source, center target coordinates, reverse-geocoded place, camera altitude, active style, and enabled layers. Do not say there is nothing unless the basemap target is also unavailable.',
-            'If basemap context includes knownLandmarks, prefer the nearest known landmark by name for "what am I looking at" answers. For example, if knownLandmarks includes Eiffel Tower, say Eiffel Tower.',
-            'At local zoom, use basemap nearbyPlaces, place.labels, viewportPlaces.visibleLabels, and viewportPlaces.streetLabels to identify the building, premises, roads, and named places visible around the screen target.',
-            'If basemap context includes viewportPlaces, prefer dominantCountry, dominantRegion, and dominantLocality over raw coordinates.',
-            'When basemap context includes viewportSamples or an inferred country, trust that over a single reverse-geocoded address. If most samples indicate Iran, say Iran, not the United States.',
-            'When a viewport screenshot is attached after get_entity_context, read clearly legible street, building, and place labels from it and combine them with structured label context. Respect scene viewScale: at global/continental/regional scale, avoid naming a precise street/city from one center pixel.',
-            'Do not mention disabled layers or stale selections.',
-            'When a request requires a tool call, do not speak in the same response as the tool call. Call the tool first.',
-            'When a single user request contains MULTIPLE changes (e.g. "switch to operator layout, use balanced detection at density 50, and switch to Bing aerial"), call ALL the corresponding tools — multiple tool calls in sequence — before speaking. Never confirm a partial subset. If a later tool fails, say which parts succeeded and which failed.',
-            'After receiving tool output, speak exactly one short confirmation. Do not repeat the confirmation.',
-            'For "show/open/turn on" layer requests, enable the matching layer. For "hide/close/turn off", disable it.',
-            // INSTRUCTION-ONLY mapping for the two globe-scale named views.
-            //
-            // Both are BROADER than the first-run tiles on purpose. A person
-            // naming layers out loud has chosen them; a tile is a first
-            // impression handed to a stranger. So voice keeps fires in the
-            // environmental view and keeps infrastructure entirely, while the
-            // launcher's ENVIRONMENTAL tile is quakes-only and has no
-            // infrastructure tile at all. See src/firstRunExperience.js for why.
-            //
-            // Fully expressible with tools that already exist, so
-            // GEV_REALTIME_TOOLS is deliberately untouched — deleting this one
-            // string is the whole rollback.
-            'NAMED VIEWS are shorthand for tool calls you already have — there is no "mode" tool for them. Treat ONLY these as the shorthand: "infrastructure mode" / "the infrastructure view" / "show me global infrastructure" means three set_layer_visibility calls (local-datacenters, local-dams, telegeography-submarine-cables) plus zoom_to_globe; "environmental mode" / "earth watch" / "active events", said as the name of a view, means set_layer_visibility for local-firms and earthquakes plus zoom_to_globe. Anything vaguer is NOT this shorthand — an open-ended question about the world or the news is an ordinary question: answer it, or use analyst_query over the layers already on. Never switch a whole view on to answer a question nobody asked to see. When you do run one, make every call before speaking, then give one confirmation naming the resulting state; if the fires layer comes back unavailable because no FIRMS key is configured, say so plainly — the earthquakes still loaded. "Live contacts" and "space missions" are NOT this pattern: they stay set_context_mode{mode:"contacts"} and set_context_mode{mode:"space-missions"}.',
-            'For visual filter requests, call set_visual_style with one of the allowed style IDs.',
-            'Disambiguation table — basemap vs layer vs style: basemap switching requires an explicit stack name — "Bing aerial" means set_map_stack bing-aerial, "aerial with labels" means bing-labels, "OSM"/"road map" means osm, "Esri"/"Esri imagery" means esri-imagery, "Google 3D"/"photorealistic" means photoreal. Any mention of "satellite" or "satellites" ALWAYS means the satellites DATA LAYER via set_layer_visibility, never a basemap. "surveillance"/"night vision"/"thermal" are visual STYLES via set_visual_style.',
-            'HUD requests ("hud on/off", "switch to operator/minimal/tactical layout") use set_hud. Detection requests ("detection on", "dense mode", "balanced mode", "sparse mode", "set density to 25", "use weighted allocation") use set_detection. Density snaps to 0/25/50/75/100 and derives Sparse/Balanced/Dense; panoptic is a legacy alias for Dense.',
-            'Bloom/sharpen requests use set_post_processing. Scene requests ("play orbital watch", "stop the scene", "what scenes are there") use control_scene. CCTV camera requests ("next camera", "nearest camera", "select the Congress camera", "show coverage") use control_cctv — the CCTV layer must be enabled first.',
-            'Radio playback requests use control_radio. "Turn on/start the radio" means action=play; action=enable only reveals Radio markers and must be reserved for explicit "show/enable the Radio layer/markers" requests. After a prepared playback result, briefly confirm any other completed actions and say "Turning on the radio"—never claim it is already playing. The client keeps Radio muted until playback is verified, then closes voice before restoring Radio volume. Examples: "play news near Austin" → select category=news locationId=austin; "play US news" → select category=news country=US; "Radio volume 30" → volume; pause/resume/stop/next/previous use the matching action. Radio selection never moves the camera.',
-            '"Track/follow <something specific>" (a callsign, ship name, satellite name) uses track_entity. "Take me to the biggest fire" uses track_entity with query "biggest fire" (the fires layer must be enabled). Bare "orbit" means camera orbit of the current landmark. "Stop following/tracking" uses stop_tracking.',
-            '"Show me which planes are overhead"/"frame the ships"/"show me the satellites above" use frame_overhead with the matching target.',
-            "After frame_overhead, speak ONLY from the tool result's count field — e.g. 'Framed fourteen aircraft, labels on'; never reassess or second-guess the count aloud.",
-            'Confirmations echo the RESULTING state, never the request: "HUD operator layout", "Density twenty-five percent", "Bing aerial imagery", "Tracking UAL428", "Framed fourteen aircraft". On ok=false, state the failure plainly: "Nothing matched UAL999", "No ships within 120 kilometers". Never claim an action without ok=true in the tool result.',
-            'For destination requests such as "take me to Italy", "go to NYC", or "show me the Eiffel Tower", call fly_to_location. Prefer known city IDs when available; otherwise pass the plain place query.',
-            'Navigation-only requests ("take me to X", "go to X", "fly to X") are NOT descriptions: call fly_to_location alone and do NOT also call annotate_map, unless the user explicitly asks to mark the place or you go on to explain specific places there. Never drop a point pin on a region-scale natural feature (a mountain range, desert, sea, or forest) — a single point in the middle of the Rockies is meaningless. If the user explicitly asks to mark such a region, prefer type=area.',
-            'For country and city destinations, omit rangeM so GEV frames the whole country or city in view. For landmarks and buildings, omit rangeM so GEV chooses a close landmark view.',
-            'Only supply rangeM when the user asks for a particular numeric height, distance, closer view, or wider view.',
-            'For relative requests such as "zoom out a little", "pull back", "zoom in more", or "get closer", always call adjust_camera_zoom. But "globe view", "whole earth", "the whole planet", or "zoom all the way out" is an ABSOLUTE framing: call zoom_to_globe once instead — repeated adjust_camera_zoom calls can never reach the globe. Never claim the camera moved without the tool returning ok=true.',
-            'Keep spoken confirmations short, e.g. "Opening datacenters" or "Flying to London".',
-            'WHITEBOARD THE WORLD: whenever you describe or explain a specific place, building, campus, district, boundary, or a spatial relationship between places, call annotate_map to mark it visually as you talk — like sketching on the map. To call out a specific building, campus, compound, park, or district, use type=area (it traces and encloses the real footprint — a building gets a glowing volume, a district gets a draped outline). Use type=highlight only for a transient pulse on a precise spot that has no meaningful footprint, and type=pin to drop a labeled marker. Examples: "what is the Palace of Fine Arts?" → an AREA on it; "the old military base next to it" → an AREA on the Presidio; "ILM is right here" → a pin; "it sits next to the Marina" → an arrow from one to the other. Prefer place NAMES so the app resolves real positions and outlines; never invent coordinates or pixel locations.',
-            'On every annotation, also set entityKind to what the thing IS when you know it: building (one structure), compound (campus/grounds/mall/park), district (neighborhood/area of a city), street (a named road), or point_feature (a monument, statue, memorial, plaque, fountain, or other small point landmark). entityKind is a FACT about the target, independent of the mark type you chose — monuments and statues are point_feature even when you use type=area; the app then anchors them as precise points instead of guessing at a footprint.',
-            'Use a single annotate_map call with several annotations when you are describing multiple related places at once. Set flyTo true only when the user is not already looking at the place; if every mark in a call lands off-screen the app auto-frames them, so when unsure leave flyTo false. Do NOT say out loud that you are drawing, highlighting, or annotating — just speak naturally about the places while the marks appear. ANNOTATIONS ACCUMULATE AND PERSIST — keep adding marks as you explore; you can fly around, change topic, and jump between far-apart places and the marks STAY, so the user can build up the map and show people things. Do NOT clear on your own initiative: never pass clearPrevious, and call clear_annotations ONLY when the user EXPLICITLY asks to clear or reset the map.',
-            'If an annotate_map result has partial:true or any failedLabels, do not pretend those places appeared — briefly work into your narration that you could not pinpoint them (e.g. "I couldn\'t place X"). If a route comes back as a direct line (no street route was found), describe it as a straight-line distance, not a walking/driving time. If an annotate_map result has capped:true, the map is full — ASK the user whether to clear before drawing more; do not clear unprompted. outlinePending:true is NOT a failure, but it is also NOT an outline: the anchor mark is placed and the boundary is still being traced in the background. Narrate it in progress — e.g. "tracing the boundary now" — and NEVER state the outline is already drawn or visible; it may yet come back as just a point. A later system item of type map_annotation_outline reports the final outcome per mark (status resolved or failed, with its label): use it to quietly confirm, or to correct yourself if you implied a boundary that stayed a point — an honest miss beats a misleading guess.',
-            'PREFER NAMES. Only when you cannot name or geocode a place but you can clearly SEE the exact spot in the most recent viewport screenshot, fall back to screenX/screenY (normalized 0..1 from that image) to point at it; the app converts the pixel to a real world point. Never use screenX/screenY for something you could name.',
-            'PATHS vs DISTANCES: for "walking/driving route from A to B" (or through several stops), use type=route with the ordered points and the matching mode (walking/driving/cycling) — the app draws the real street-following path on the map and reports distance and travel time, which you can read aloud. For "how far is X from Y", "is it nearby", or "X is next to Y", use type=arrow between the two — it draws a floating connector and shows the straight-line distance. Do NOT use route for a simple distance/proximity question.',
-          ].join('\n'),
+          instructions: GEV_BACKEND_INSTRUCTIONS,
           tools: GEV_REALTIME_TOOLS,
           tool_choice: 'auto',
         },
@@ -5239,6 +5256,7 @@ export function openAiRealtimeProxy() {
       try {
         const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
           method: 'POST',
+          signal: AbortSignal.timeout(20_000),
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
@@ -5249,6 +5267,7 @@ export function openAiRealtimeProxy() {
         const body = await response.text();
         res.statusCode = response.status;
         res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
+        res.setHeader('Cache-Control', 'no-store');
         // Which tier/model this secret was actually minted for. The upstream
         // body is passed through untouched (the client parses it verbatim), so
         // these headers are the authoritative echo — including the case where a
@@ -5258,11 +5277,21 @@ export function openAiRealtimeProxy() {
         if (requestedTier && !isKnownVoiceTier(requestedTier)) {
           res.setHeader('X-GEV-Voice-Tier-Fallback', '1');
         }
-        res.end(body);
+        if (response.ok) {
+          res.end(body);
+        } else {
+          let code = 'upstream_error';
+          try {
+            const value = JSON.parse(body)?.error?.code;
+            if (['insufficient_quota', 'credit_balance_exhausted', 'invalid_api_key', 'model_not_found', 'rate_limit_exceeded'].includes(value)) code = value;
+          } catch { /* Provider failures need not be JSON. */ }
+          res.end(JSON.stringify({ error: { code, message: `OpenAI отклонил запрос голосовой сессии (HTTP ${response.status}). Проверьте ключ, модель и баланс API.` } }));
+        }
       } catch (error) {
         res.statusCode = 502;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: error?.message || 'Failed to create Realtime token' }));
+        console.warn('[OpenAI Realtime token]', safeProviderError(error));
+        res.end(JSON.stringify({ error: 'Не удалось создать голосовую сессию Realtime' }));
       }
     });
   }
@@ -5338,20 +5367,41 @@ export function keylessGooglePlacesResponse(apiKey) {
  * Cesium feature metadata. Nearby Search supplies the names around the actual
  * screen-space target without exposing the Google API key in the request.
  */
+export function googlePlacesSearchCenter(searchParams) {
+  const hasLatitude = searchParams.has('lat');
+  const hasLongitude = searchParams.has('lon');
+  if (!hasLatitude && !hasLongitude) return undefined;
+  if (hasLatitude !== hasLongitude) return null;
+  const rawLatitude = searchParams.get('lat');
+  const rawLongitude = searchParams.get('lon');
+  if (String(rawLatitude).trim() === '' || String(rawLongitude).trim() === '') return null;
+  const latitude = Number(rawLatitude);
+  const longitude = Number(rawLongitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)
+      || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  return { latitude, longitude };
+}
+
+export function googlePlacesPageSize(searchParams, fallback = 5) {
+  const value = Number(searchParams.get('limit'));
+  if (!Number.isInteger(value) || value < 1) return fallback;
+  return Math.min(20, value);
+}
+
 export function googlePlacesContextProxy() {
   function install(middlewares) {
     middlewares.use('/api/google/nearby-places', async (req, res) => {
       if (req.method !== 'GET') {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method not allowed', places: [] }));
+        res.end(JSON.stringify({ error: 'Метод не поддерживается', places: [] }));
         return;
       }
 
       // Keyless place context has no provider cost, so it resolves before the
       // paid-endpoint limiter can consume or exhaust quota (mirrors the HUD
       // summary route).
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      const apiKey = (process.env.GOOGLE_MAPS_SERVER_API_KEY || process.env.GOOGLE_MAPS_API_KEY);
       const keyless = keylessGooglePlacesResponse(apiKey);
       if (keyless) {
         res.statusCode = keyless.statusCode;
@@ -5369,7 +5419,7 @@ export function googlePlacesContextProxy() {
         res.statusCode = 429;
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Retry-After', '5');
-        res.end(JSON.stringify({ error: 'Rate limit exceeded', places: [] }));
+        res.end(JSON.stringify({ error: 'Превышен лимит запросов', places: [] }));
         return;
       }
 
@@ -5380,7 +5430,7 @@ export function googlePlacesContextProxy() {
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
         res.statusCode = 400;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Valid lat and lon are required', places: [] }));
+        res.end(JSON.stringify({ error: 'Нужны корректные широта и долгота', places: [] }));
         return;
       }
 
@@ -5402,6 +5452,7 @@ export function googlePlacesContextProxy() {
             ].join(','),
           },
           body: JSON.stringify({
+            languageCode: 'ru',
             maxResultCount: 20,
             rankPreference: 'DISTANCE',
             locationRestriction: {
@@ -5446,12 +5497,13 @@ export function googlePlacesContextProxy() {
         res.setHeader('Cache-Control', 'private, max-age=300');
         res.end(JSON.stringify({
           places,
-          error: response.ok ? null : data.error?.message || 'Google Places request failed',
+          error: response.ok ? null : 'Не удалось получить места Google',
         }));
       } catch (error) {
         res.statusCode = 502;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify({ error: error?.message || 'Google Places request failed', places: [] }));
+        console.warn('[Google Places nearby]', safeProviderError(error));
+        res.end(JSON.stringify({ error: 'Не удалось получить места Google', places: [] }));
       }
     });
 
@@ -5463,14 +5515,14 @@ export function googlePlacesContextProxy() {
       if (req.method !== 'GET') {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method not allowed', places: [] }));
+        res.end(JSON.stringify({ error: 'Метод не поддерживается', places: [] }));
         return;
       }
 
       // Keyless place context has no provider cost, so it resolves before the
       // paid-endpoint limiter can consume or exhaust quota (mirrors the HUD
       // summary route).
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      const apiKey = (process.env.GOOGLE_MAPS_SERVER_API_KEY || process.env.GOOGLE_MAPS_API_KEY);
       const keyless = keylessGooglePlacesResponse(apiKey);
       if (keyless) {
         res.statusCode = keyless.statusCode;
@@ -5488,19 +5540,22 @@ export function googlePlacesContextProxy() {
         res.statusCode = 429;
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Retry-After', '5');
-        res.end(JSON.stringify({ error: 'Rate limit exceeded', places: [] }));
+        res.end(JSON.stringify({ error: 'Превышен лимит запросов', places: [] }));
         return;
       }
 
       const requestUrl = new URL(req.url || '', 'http://localhost');
       const textQuery = String(requestUrl.searchParams.get('q') || '').trim();
-      const latitude = Number(requestUrl.searchParams.get('lat'));
-      const longitude = Number(requestUrl.searchParams.get('lon'));
+      const center = googlePlacesSearchCenter(requestUrl.searchParams);
+      const pageSize = googlePlacesPageSize(requestUrl.searchParams);
       const radiusM = Math.max(50, Math.min(50000, Number(requestUrl.searchParams.get('radiusM')) || 4000));
-      if (!textQuery || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      const hasCenter = Boolean(center);
+      const latitude = center?.latitude;
+      const longitude = center?.longitude;
+      if (!textQuery || center === null) {
         res.statusCode = 400;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'q, lat and lon are required', places: [] }));
+        res.end(JSON.stringify({ error: 'Нужен запрос и, при использовании привязки, корректная широта и долгота', places: [] }));
         return;
       }
 
@@ -5518,17 +5573,19 @@ export function googlePlacesContextProxy() {
               'places.viewport',
               'places.primaryType',
               'places.types',
+              'nextPageToken',
             ].join(','),
           },
           body: JSON.stringify({
             textQuery,
-            locationBias: {
+            languageCode: 'ru',
+            ...(hasCenter ? { locationBias: {
               circle: {
                 center: { latitude, longitude },
                 radius: radiusM,
               },
-            },
-            maxResultCount: 5,
+            } } : {}),
+            pageSize,
           }),
         });
         const data = await response.json().catch(() => ({}));
@@ -5554,7 +5611,9 @@ export function googlePlacesContextProxy() {
               address: place.formattedAddress || null,
               latitude: placeLatitude,
               longitude: placeLongitude,
-              distanceM: approximateDistanceM(latitude, longitude, placeLatitude, placeLongitude),
+              distanceM: hasCenter
+                ? approximateDistanceM(latitude, longitude, placeLatitude, placeLongitude)
+                : null,
               primaryType: place.primaryType || null,
               types,
               viewport,
@@ -5567,12 +5626,14 @@ export function googlePlacesContextProxy() {
         res.setHeader('Cache-Control', 'private, max-age=300');
         res.end(JSON.stringify({
           places,
-          error: response.ok ? null : data.error?.message || 'Google Places request failed',
+          hasMore: Boolean(data.nextPageToken),
+          error: response.ok ? null : 'Не удалось выполнить поиск Google',
         }));
       } catch (error) {
         res.statusCode = 502;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify({ error: error?.message || 'Google Places request failed', places: [] }));
+        console.warn('[Google Places text search]', safeProviderError(error));
+        res.end(JSON.stringify({ error: 'Не удалось выполнить поиск Google', places: [] }));
       }
     });
   }
@@ -6061,6 +6122,23 @@ const GEV_REALTIME_TOOLS = [
   },
   {
     type: 'function',
+    name: 'search_places',
+    description: 'Search Google Places for multiple real places of one category in a named city or region, then mark every returned result on the map in one batch. Use for requests such as "show mosques in Tirana" or "mark cafes in this district". Results are ranked and capped at 20, so never describe them as a complete registry.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        query: { type: 'string', maxLength: 160, description: 'Place category or search phrase, for example "mosques" or "Emaar offices".' },
+        location: { type: 'string', maxLength: 160, description: 'City, administrative region, or area plus country, for example "Tirana, Albania". Omit only when the user clearly means the current view.' },
+        maxResults: { type: 'integer', minimum: 1, maximum: 20, description: 'Maximum Google Places results to mark. Use 20 when the user asks for all or many.' },
+        flyTo: { type: 'boolean', description: 'Frame the returned group. Defaults true.' },
+        persist: { type: 'boolean', description: 'Keep the resulting pins until explicitly cleared. Defaults true.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    type: 'function',
     name: 'annotate_map',
     description: "Draw annotations on the 3D map to visually point out what you are talking about — like sketching on a whiteboard over the world. Use this whenever you mention a specific place, building, campus, boundary, district, or a relationship between two places, so the user can SEE what you mean. Give place NAMES (preferred) or explicit lat/lng; the app resolves them to real-world positions and real building/area outlines — never guess pixel positions. Call this as you begin describing something, and you may mark several places in one call.",
     parameters: {
@@ -6117,7 +6195,7 @@ const GEV_REALTIME_TOOLS = [
               },
               footprint: { type: 'boolean', description: 'For type=area/highlight: trace the real building or campus outline from map data. Defaults true for area.' },
               intent: { type: 'string', enum: ['the_thing', 'around_the_thing'], description: 'For type=area: "the_thing" (default) outlines the place itself (its footprint/boundary); "around_the_thing" highlights a surrounding zone (a buffered radius around it). Infer from phrasing: "the Capitol"/"show me X" → the_thing; "around/near/by X" or "the area around X" → around_the_thing.' },
-              entityKind: { type: 'string', enum: ['building', 'compound', 'district', 'street', 'point_feature'], description: 'What KIND of thing the target IS — a fact, not a style choice: building = one structure; compound = campus/grounds/mall/park; district = neighborhood or area of a city; street = a named road/corridor; point_feature = monument/statue/memorial/plaque/fountain or other small point landmark. Set it whenever you know it — it routes the resolver to the right footprint source (point_feature anchors monuments as precise points instead of adopting a nearby building outline).' },
+              entityKind: { type: 'string', enum: ['building', 'compound', 'district', 'admin_region', 'street', 'point_feature'], description: 'What KIND of thing the target IS — a fact, not a style choice: building = one structure; compound = campus/grounds/mall/park; district = neighborhood or area of a city; admin_region = state/province/oblast/governorate/emirate/autonomous region; street = a named road/corridor; point_feature = monument/statue/memorial/plaque/fountain or other small point landmark. Set it whenever you know it — it routes the resolver to the right footprint source (point_feature anchors monuments as precise points instead of adopting a nearby building outline).' },
               screenX: { type: 'number', minimum: 0, maximum: 1, description: 'Fallback only: when you cannot name/geocode the place but can SEE it in the latest viewport screenshot, the normalized horizontal position (0=left, 1=right) of the spot. The app converts it back to a real world point under that pixel.' },
               screenY: { type: 'number', minimum: 0, maximum: 1, description: 'Fallback only: normalized vertical position (0=top, 1=bottom) of the spot in the latest viewport screenshot.' },
               toScreenX: { type: 'number', minimum: 0, maximum: 1, description: 'For type=arrow: normalized x of the arrow destination from the screenshot (pixel fallback).' },
@@ -6365,7 +6443,7 @@ function aisStreamStatusSnapshot() {
   if (snapshot) return snapshot;
   return {
     status: process.env.AISSTREAM_API_KEY ? 'idle' : 'missing-key',
-    error: process.env.AISSTREAM_API_KEY ? null : 'AISSTREAM_API_KEY is not set',
+    error: process.env.AISSTREAM_API_KEY ? null : 'Не задан AISSTREAM_API_KEY',
     lastMessageAt: null,
     silentForMs: null,
     reconnectAttempt: 0,
@@ -6822,7 +6900,7 @@ export async function writeMilitaryInstallationDisk(
     await fsp.rename(temp, target);
     return true;
   } catch (err) {
-    console.warn('[Installations Proxy] disk cache write failed:', err?.message || err);
+    console.warn('[Installations Proxy] disk cache write failed:', safeProviderError(err));
     await fsp.rm(temp, { force: true }).catch(() => {});
     return false;
   }
@@ -6883,19 +6961,19 @@ function militaryInstallationsProxy() {
     middlewares.use('/api/military-installations', async (req, res) => {
       if (req.method !== 'GET') {
         res.writeHead(405, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        res.end(JSON.stringify({ error: 'Метод не поддерживается' }));
         return;
       }
       if (!_militaryInstallationsRateLimiter(clientKey(req))) {
         res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '5' });
-        res.end(JSON.stringify({ error: 'Rate limit exceeded' }));
+        res.end(JSON.stringify({ error: 'Превышен лимит запросов' }));
         return;
       }
       const url = new URL(req.url, 'http://localhost');
       const requested = validMilitaryInstallationBox(url.searchParams);
       if (!requested) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'A non-dateline bbox no larger than 10 degrees is required' }));
+        res.end(JSON.stringify({ error: 'Нужна область не шире 10 градусов и без пересечения линии перемены дат' }));
         return;
       }
       // Query the SNAPPED box, not the raw viewport: neighbouring views then
@@ -6955,7 +7033,7 @@ function militaryInstallationsProxy() {
           return;
         }
         res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        res.end(JSON.stringify({ error: 'Mapped installation context is temporarily unavailable' }));
+        res.end(JSON.stringify({ error: 'Данные об объектах инфраструктуры временно недоступны' }));
       }
     });
   }
@@ -6990,6 +7068,14 @@ const _weatherEffectsInFlight = new Map();
 const _weatherEffectsRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 45, globalMax: 120 });
 let _nominatimQueue = Promise.resolve();
 let _nominatimLastRequestAt = 0;
+const NOMINATIM_BOUNDARY_CACHE_MS = 30 * 86_400_000;
+const NOMINATIM_BOUNDARY_NEGATIVE_CACHE_MS = 86_400_000;
+const NOMINATIM_BOUNDARY_MAX_CACHE = 240;
+const NOMINATIM_BOUNDARY_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+const NOMINATIM_BOUNDARY_DISK_DIR = path.join(process.cwd(), '.gev-cache', 'nominatim-boundaries');
+const _nominatimBoundaryCache = new Map();
+const _nominatimBoundaryInFlight = new Map();
+const _nominatimBoundaryRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 20, globalMax: 30 });
 
 export function requiredFiniteQueryNumber(params, key) {
   const value = params.get(key);
@@ -7036,6 +7122,26 @@ async function fetchRegionalJson(url, {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** Serialize every call to the public Nominatim service and stay below 1 request/s. */
+function fetchNominatimJson(pathname, params, options = {}) {
+  const task = _nominatimQueue.then(async () => {
+    const waitMs = Math.max(0, 1100 - (Date.now() - _nominatimLastRequestAt));
+    if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    _nominatimLastRequestAt = Date.now();
+    const base = String(process.env.NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org').replace(/\/$/, '');
+    return fetchRegionalJson(`${base}/${pathname}?${params}`, {
+      ...options,
+      headers: {
+        'User-Agent': 'FikraMonitor/0.1 (+https://github.com/bilawalsidhu/gods-eye-view)',
+        Referer: 'https://github.com/bilawalsidhu/gods-eye-view',
+        ...(options.headers || {}),
+      },
+    });
+  });
+  _nominatimQueue = task.catch(() => null);
+  return task;
 }
 
 async function fetchRegionalText(url, {
@@ -7093,29 +7199,233 @@ function normalizeRssArticles(xml, limit = 5) {
   return articles;
 }
 
-function fetchRegionalPlace(point) {
-  const task = _nominatimQueue.then(async () => {
-    const waitMs = Math.max(0, 1100 - (Date.now() - _nominatimLastRequestAt));
-    if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
-    _nominatimLastRequestAt = Date.now();
-    const params = new URLSearchParams({
-      format: 'jsonv2',
-      lat: point.latitude.toFixed(5),
-      lon: point.longitude.toFixed(5),
-      zoom: '10',
-      addressdetails: '1',
-      'accept-language': 'en',
-    });
-    const payload = await fetchRegionalJson(`https://nominatim.openstreetmap.org/reverse?${params}`, {
-      headers: {
-        'User-Agent': 'GodsEyeView/0.1 (+https://github.com/bilawalsidhu/gods-eye-view)',
-        Referer: 'https://github.com/bilawalsidhu/gods-eye-view',
-      },
-    });
-    return normalizeRegionalPlace(payload);
+function nominatimOuterRings(geojson) {
+  const coordinates = geojson?.coordinates;
+  if (!Array.isArray(coordinates)) return [];
+  if (geojson.type === 'Polygon') return Array.isArray(coordinates[0]) ? [coordinates[0]] : [];
+  if (geojson.type === 'MultiPolygon') {
+    return coordinates.map((polygon) => polygon?.[0]).filter(Array.isArray);
+  }
+  return [];
+}
+
+function normalizeCoordinateRing(rawRing) {
+  if (!Array.isArray(rawRing)) return null;
+  const ring = rawRing.map((point) => {
+    const lon = Number(point?.[0]);
+    const lat = Number(point?.[1]);
+    return Number.isFinite(lon) && Number.isFinite(lat)
+      && lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90
+      ? [lon, lat]
+      : null;
+  }).filter(Boolean);
+  if (ring.length < 3 || ring.length > 50_000) return null;
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) ring.push([...first]);
+  return ring.length >= 4 ? ring : null;
+}
+
+function coordinateRingArea(ring) {
+  let area = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    area += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+  }
+  return Math.abs(area) / 2;
+}
+
+/** Convert a Nominatim search response into one drawable authoritative outer ring. */
+export function normalizeNominatimBoundary(payload, scope = 'state') {
+  if (!Array.isArray(payload)) return null;
+  const expectedTypes = {
+    country: new Set(['country']),
+    state: new Set(['state', 'province', 'region', 'emirate', 'oblast', 'autonomous_community']),
+    county: new Set(['county', 'state_district', 'district']),
+    city: new Set(['city', 'town', 'municipality', 'village']),
+  }[scope] || new Set();
+
+  let best = null;
+  for (let index = 0; index < payload.length; index += 1) {
+    const row = payload[index] || {};
+    const addressType = String(row.addresstype || '').toLowerCase();
+    const category = String(row.category || row.class || '').toLowerCase();
+    const type = String(row.type || '').toLowerCase();
+    const isExpected = expectedTypes.has(addressType);
+    if (!isExpected && category !== 'boundary' && type !== 'administrative') continue;
+    const rings = nominatimOuterRings(row.geojson)
+      .map(normalizeCoordinateRing)
+      .filter(Boolean)
+      .sort((a, b) => coordinateRingArea(b) - coordinateRingArea(a));
+    const ring = rings[0];
+    if (!ring) continue;
+    const score = (isExpected ? 1000 : 0)
+      + (category === 'boundary' ? 200 : 0)
+      + (type === 'administrative' ? 100 : 0)
+      + (row.osm_type === 'relation' ? 50 : 0)
+      - index;
+    if (!best || score > best.score) {
+      best = {
+        score,
+        payload: {
+          ring,
+          label: String(row.display_name || row.name || '').slice(0, 240) || null,
+          osmType: row.osm_type || null,
+          osmId: Number.isFinite(Number(row.osm_id)) ? Number(row.osm_id) : null,
+          source: 'nominatim',
+        },
+      };
+    }
+  }
+  return best?.payload || null;
+}
+
+function nominatimBoundaryCacheKey(query, scope) {
+  return `${scope}|${String(query).trim().toLowerCase()}`;
+}
+
+function nominatimBoundaryDiskPath(cacheKey) {
+  return path.join(NOMINATIM_BOUNDARY_DISK_DIR, `${createHash('sha1').update(cacheKey).digest('hex')}.json`);
+}
+
+async function readNominatimBoundaryDisk(cacheKey) {
+  try {
+    const entry = JSON.parse(await fsp.readFile(nominatimBoundaryDiskPath(cacheKey), 'utf8'));
+    return Number.isFinite(entry?.cachedAt) && entry?.payload && typeof entry.payload === 'object' ? entry : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeNominatimBoundaryDisk(cacheKey, entry) {
+  fsp.mkdir(NOMINATIM_BOUNDARY_DISK_DIR, { recursive: true })
+    .then(() => fsp.writeFile(nominatimBoundaryDiskPath(cacheKey), JSON.stringify(entry), 'utf8'))
+    .catch((error) => console.warn('[Nominatim Boundary] disk cache write failed:', safeProviderError(error)));
+}
+
+function rememberNominatimBoundary(cacheKey, entry) {
+  _nominatimBoundaryCache.delete(cacheKey);
+  _nominatimBoundaryCache.set(cacheKey, entry);
+  while (_nominatimBoundaryCache.size > NOMINATIM_BOUNDARY_MAX_CACHE) {
+    _nominatimBoundaryCache.delete(_nominatimBoundaryCache.keys().next().value);
+  }
+}
+
+async function fetchNominatimBoundary(query, scope) {
+  const params = new URLSearchParams({
+    q: query,
+    format: 'jsonv2',
+    addressdetails: '1',
+    polygon_geojson: '1',
+    polygon_threshold: scope === 'city' ? '0.0005' : scope === 'county' ? '0.001' : '0.002',
+    limit: '5',
+    dedupe: '1',
+    'accept-language': 'ru,en',
   });
-  _nominatimQueue = task.catch(() => null);
-  return task;
+  const raw = await fetchNominatimJson('search', params, {
+    timeoutMs: 12_000,
+    maxBytes: NOMINATIM_BOUNDARY_MAX_RESPONSE_BYTES,
+  });
+  return normalizeNominatimBoundary(raw, scope);
+}
+
+function sendNominatimBoundary(res, payload, source) {
+  res.writeHead(200, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'private, max-age=3600',
+    'X-Nominatim-Boundary': source,
+  });
+  res.end(JSON.stringify(payload || { ring: null, source: 'nominatim' }));
+}
+
+function nominatimBoundaryProxy() {
+  const install = (middlewares) => {
+    middlewares.use('/api/osm/admin-boundary', async (req, res) => {
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Метод не поддерживается', ring: null }));
+        return;
+      }
+      const url = new URL(req.url || '', 'http://localhost');
+      const query = String(url.searchParams.get('q') || '').trim();
+      const scope = String(url.searchParams.get('scope') || 'state').toLowerCase();
+      if (!query || query.length > 200 || !['country', 'state', 'county', 'city'].includes(scope)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Некорректный административный запрос', ring: null }));
+        return;
+      }
+
+      const cacheKey = nominatimBoundaryCacheKey(query, scope);
+      const now = Date.now();
+      const memory = _nominatimBoundaryCache.get(cacheKey);
+      const memoryTtl = memory?.payload?.ring ? NOMINATIM_BOUNDARY_CACHE_MS : NOMINATIM_BOUNDARY_NEGATIVE_CACHE_MS;
+      if (memory && now - memory.cachedAt <= memoryTtl) {
+        sendNominatimBoundary(res, memory.payload, 'HIT');
+        return;
+      }
+
+      const disk = await readNominatimBoundaryDisk(cacheKey);
+      const diskTtl = disk?.payload?.ring ? NOMINATIM_BOUNDARY_CACHE_MS : NOMINATIM_BOUNDARY_NEGATIVE_CACHE_MS;
+      if (disk && now - disk.cachedAt <= diskTtl) {
+        rememberNominatimBoundary(cacheKey, disk);
+        sendNominatimBoundary(res, disk.payload, 'DISK');
+        return;
+      }
+
+      let request = _nominatimBoundaryInFlight.get(cacheKey);
+      const shared = Boolean(request);
+      if (!request) {
+        if (!_nominatimBoundaryRateLimiter(clientKey(req))) {
+          if (memory || disk) {
+            sendNominatimBoundary(res, (memory || disk).payload, 'STALE');
+          } else {
+            res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '5' });
+            res.end(JSON.stringify({ error: 'Превышен лимит запросов', ring: null }));
+          }
+          return;
+        }
+        request = fetchNominatimBoundary(query, scope)
+          .then((payload) => {
+            const entry = { payload: payload || { ring: null, source: 'nominatim' }, cachedAt: Date.now() };
+            rememberNominatimBoundary(cacheKey, entry);
+            writeNominatimBoundaryDisk(cacheKey, entry);
+            return entry;
+          })
+          .finally(() => _nominatimBoundaryInFlight.delete(cacheKey));
+        _nominatimBoundaryInFlight.set(cacheKey, request);
+      }
+
+      try {
+        const entry = await request;
+        sendNominatimBoundary(res, entry.payload, shared ? 'INFLIGHT' : 'MISS');
+      } catch (error) {
+        const stale = memory || disk;
+        if (stale) {
+          sendNominatimBoundary(res, stale.payload, 'STALE');
+          return;
+        }
+        console.warn('[Nominatim Boundary]', safeProviderError(error));
+        res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Граница временно недоступна', ring: null }));
+      }
+    });
+  };
+  return {
+    name: 'nominatim-boundary-proxy',
+    configureServer(server) { install(server.middlewares); },
+    configurePreviewServer(server) { install(server.middlewares); },
+  };
+}
+
+function fetchRegionalPlace(point) {
+  const params = new URLSearchParams({
+    format: 'jsonv2',
+    lat: point.latitude.toFixed(5),
+    lon: point.longitude.toFixed(5),
+    zoom: '10',
+    addressdetails: '1',
+    'accept-language': 'ru',
+  });
+  return fetchNominatimJson('reverse', params).then(normalizeRegionalPlace);
 }
 
 async function fetchRegionalNews(place) {
@@ -7123,9 +7433,9 @@ async function fetchRegionalNews(place) {
   if (!query) return { status: 'unavailable', query: null, articles: [], source: null };
   const rssParams = new URLSearchParams({
     q: String(query).replace(/["\\]/g, ' ').trim(),
-    hl: 'en-US',
-    gl: 'US',
-    ceid: 'US:en',
+    hl: 'ru',
+    gl: 'RU',
+    ceid: 'RU:ru',
   });
   try {
     const xml = await fetchRegionalText(`https://news.google.com/rss/search?${rssParams}`, {
@@ -7149,7 +7459,7 @@ async function fetchRegionalNews(place) {
       timeoutMs: 12_000,
     });
     const articles = normalizeRegionalArticles(payload, 5);
-    return { status: articles.length ? 'ready' : 'empty', query, articles, source: 'GDELT fallback' };
+    return { status: articles.length ? 'ready' : 'empty', query, articles, source: 'GDELT, резервный источник' };
   } catch {
     return { status: 'unavailable', query, articles: [], source: null };
   }
@@ -7211,19 +7521,19 @@ function regionalBriefProxy() {
     middlewares.use('/api/regional-brief', async (req, res) => {
       if (req.method !== 'GET') {
         res.writeHead(405, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        res.end(JSON.stringify({ error: 'Метод не поддерживается' }));
         return;
       }
       if (!_regionalBriefRateLimiter(clientKey(req))) {
         res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '10' });
-        res.end(JSON.stringify({ error: 'Rate limit exceeded' }));
+        res.end(JSON.stringify({ error: 'Превышен лимит запросов' }));
         return;
       }
       const url = new URL(req.url || '', 'http://localhost');
       const point = validRegionalPoint(url.searchParams);
       if (!point) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Valid latitude and longitude are required' }));
+        res.end(JSON.stringify({ error: 'Нужны корректные широта и долгота' }));
         return;
       }
       const key = `${(Math.round(point.latitude * 10) / 10).toFixed(1)},${(Math.round(point.longitude * 10) / 10).toFixed(1)}`;
@@ -7250,7 +7560,7 @@ function regionalBriefProxy() {
           return;
         }
         res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        res.end(JSON.stringify({ error: 'Regional briefing is temporarily unavailable' }));
+        res.end(JSON.stringify({ error: 'Региональная сводка временно недоступна' }));
       }
     });
   }
@@ -7285,19 +7595,19 @@ function weatherEffectsProxy() {
     middlewares.use('/api/weather-effects', async (req, res) => {
       if (req.method !== 'GET') {
         res.writeHead(405, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        res.end(JSON.stringify({ error: 'Метод не поддерживается' }));
         return;
       }
       if (!_weatherEffectsRateLimiter(clientKey(req))) {
         res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '10' });
-        res.end(JSON.stringify({ error: 'Rate limit exceeded' }));
+        res.end(JSON.stringify({ error: 'Превышен лимит запросов' }));
         return;
       }
       const url = new URL(req.url || '', 'http://localhost');
       const point = validRegionalPoint(url.searchParams);
       if (!point) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Valid latitude and longitude are required' }));
+        res.end(JSON.stringify({ error: 'Нужны корректные широта и долгота' }));
         return;
       }
       const key = `${(Math.round(point.latitude * 10) / 10).toFixed(1)},${(Math.round(point.longitude * 10) / 10).toFixed(1)}`;
@@ -7332,7 +7642,7 @@ function weatherEffectsProxy() {
           return;
         }
         res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        res.end(JSON.stringify({ error: 'Weather effects are temporarily unavailable' }));
+        res.end(JSON.stringify({ error: 'Погодные эффекты временно недоступны' }));
       }
     });
   }
@@ -7649,7 +7959,7 @@ function keySetupEndpoint() {
           // .env watcher may fire too; a second queued restart is harmless.
           setTimeout(() => {
             server.restart().catch((error) => {
-              console.warn('[KeySetup] Dev-server restart failed:', error?.message || error);
+              console.warn('[KeySetup] Dev-server restart failed:', safeProviderError(error));
             });
           }, 250);
         });
@@ -7673,9 +7983,11 @@ export default defineConfig(({ mode }) => {
     if (process.env[key] === undefined) process.env[key] = val;
   }
   const env = { ...process.env };
-  const localAllowedHosts = ['localhost', '127.0.0.1', '.local'];
+  const localAllowedHosts = ['localhost', '127.0.0.1', '[::1]'];
+  const securityHeaders = { 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "frame-ancestors 'none'" };
   return {
     plugins: [
+      localSecurityPlugin(),
       cesium(),
       openSkyProxy(),
       celestrakProxy(),
@@ -7685,6 +7997,7 @@ export default defineConfig(({ mode }) => {
       terrainHeightsProxy(),
       adsbdbProxy(),
       overpassProxy(),
+      nominatimBoundaryProxy(),
       militaryInstallationsProxy(),
       regionalBriefProxy(),
       weatherEffectsProxy(),
@@ -7695,19 +8008,30 @@ export default defineConfig(({ mode }) => {
       aisLiveProxy(),
       trackBackfillProxies(),
       openAiRealtimeProxy(),
+      liveVoiceProxy({
+        tools: GEV_REALTIME_TOOLS,
+        instructions: GEV_BACKEND_INSTRUCTIONS,
+        allowRequest: (req, res) => enforceOptInRateLimit(openAiRateLimiter(), req, res),
+      }),
       googlePlacesContextProxy(),
+      googleGeocodingProxy({ allowRequest: (req, res) => enforceOptInRateLimit(googleRateLimiter(), req, res) }),
       keySetupEndpoint(),
-    ],
+    ].map((plugin) => {
+      // Provider Settings deliberately requires Vite's development restart API.
+      if (plugin.configureServer && !plugin.configurePreviewServer && plugin.name !== 'gev-key-setup') {
+        plugin.configurePreviewServer = plugin.configureServer;
+      }
+      return plugin;
+    }),
     server: {
-      host: env.HOST || 'localhost',
+      host: env.HOST || '127.0.0.1',
       port: parseInt(env.PORT, 10) || 4173,
-      // When binding to all interfaces, allow any host; otherwise restrict to local names
-      allowedHosts: (env.HOST === '0.0.0.0' || env.HOST === '::')
-        ? true
-        : localAllowedHosts,
+      strictPort: true,
+      allowedHosts: localAllowedHosts,
+      cors: false,
       fs: {
         // Pinokio keeps optional credentials in this ignored local file.
-        deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/ENVIRONMENT'],
+        deny: ['.env', '.env.*', '.npmrc', '.netrc', 'credentials.json', '*.{crt,pem,key,p12,pfx,log,jsonl}', '**/.git/**', '**/ENVIRONMENT', '**/.gev-logs/**', '**/.gev-cache/**', '**/artifacts/**', '**/output/**', '**/.playwright-cli/**'],
       },
       // Framing protection belongs on the APP DOCUMENT, not on API responses:
       // a browser evaluates frame-ancestors against the framed page's own
@@ -7721,10 +8045,20 @@ export default defineConfig(({ mode }) => {
         'Content-Security-Policy': "frame-ancestors 'none'",
       },
     },
+    preview: {
+      host: env.HOST || '127.0.0.1',
+      port: parseInt(env.PORT, 10) || 4173,
+      strictPort: true,
+      allowedHosts: localAllowedHosts,
+      cors: false,
+      headers: securityHeaders,
+    },
     // Expose selected API keys to the browser via import.meta.env.*
     define: {
       'import.meta.env.GOOGLE_MAPS_API_KEY': JSON.stringify(env.GOOGLE_MAPS_API_KEY),
       'import.meta.env.CESIUM_ION_TOKEN': JSON.stringify(env.CESIUM_ION_TOKEN),
+      'import.meta.env.GEV_DEBUG_LOG': JSON.stringify(env.GEV_DEBUG_LOG === '1' ? '1' : '0'),
+      'import.meta.env.OPENAI_VOICE_ENGINE': JSON.stringify(env.OPENAI_VOICE_ENGINE || 'live'),
     },
     build: {
       // The Cesium engine bundle is inherently large; raise the warning ceiling

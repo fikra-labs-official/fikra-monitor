@@ -3,10 +3,12 @@
  * Each recipe is deterministic so repeated runs produce similar footage.
  */
 
+import { t } from '../i18n/index.js';
+
 export const SCENE_RECIPES = [
   {
     id: 'flights-radar',
-    title: 'Global Flights Radar',
+    title: t('scene.recipe.flightsRadar'),
     durationSec: 30,
     style: 'retro',
     ui: { hidePanels: true, hudMode: 'minimal', safeFrame: '16:9' },
@@ -31,7 +33,7 @@ export const SCENE_RECIPES = [
   },
   {
     id: 'orbital-watch',
-    title: 'Orbital Watch',
+    title: t('scene.recipe.orbitalWatch'),
     durationSec: 32,
     style: 'surveillance',
     ui: { hidePanels: true, hudMode: 'full', safeFrame: '16:9' },
@@ -64,7 +66,7 @@ export const SCENE_RECIPES = [
   },
   {
     id: 'thermal-threats',
-    title: 'Thermal Threat Board',
+    title: t('scene.recipe.thermalThreats'),
     durationSec: 26,
     style: 'thermal',
     ui: { hidePanels: true, hudMode: 'full', safeFrame: '16:9' },
@@ -96,7 +98,7 @@ export const SCENE_RECIPES = [
   },
   {
     id: 'city-overload',
-    title: 'City Overload',
+    title: t('scene.recipe.cityOverload'),
     durationSec: 30,
     style: 'surveillance',
     ui: { hidePanels: true, hudMode: 'minimal', safeFrame: '9:16' },
@@ -129,7 +131,7 @@ export const SCENE_RECIPES = [
   },
   {
     id: 'omniscience-pullback',
-    title: 'Omniscience Pullback',
+    title: t('scene.recipe.omnisciencePullback'),
     durationSec: 36,
     style: 'retro',
     ui: { hidePanels: true, hudMode: 'full', safeFrame: '16:9' },

@@ -124,7 +124,7 @@ test('Cockpit entry rollback restores the tracker captured before Contacts activ
     selectionOrigin: 'voice',
   });
 
-  assert.deepEqual(result, { entered: false, error: 'Cockpit entry was unavailable' });
+  assert.deepEqual(result, { entered: false, error: 'Вход в кабину сейчас недоступен' });
   assert.deepEqual(calls, [
     ['current:stop', { origin: 'voice' }],
     'prior:stop',
@@ -170,7 +170,7 @@ test('failed Cockpit entry clears an attempted durable target when no prior targ
     selectionOrigin: 'voice',
   });
 
-  assert.deepEqual(result, { entered: false, error: 'Cockpit entry was unavailable' });
+  assert.deepEqual(result, { entered: false, error: 'Вход в кабину сейчас недоступен' });
   assert.deepEqual(calls, [
     ['track', 'attempted', { origin: 'voice' }],
     ['stop', { origin: 'voice' }],
@@ -193,7 +193,7 @@ test('Cockpit entry exceptions are contained and restore prior tracking ownershi
     rollbackTarget: { layerId: 'military', id: 'prior' },
   });
 
-  assert.deepEqual(result, { entered: false, error: 'entry exploded' });
+  assert.deepEqual(result, { entered: false, error: 'Вход в кабину сейчас недоступен' });
   assert.deepEqual(calls, [
     'enter',
     'current:stop',
@@ -223,7 +223,7 @@ test('a partially mutating selected tracker is stopped when acquisition throws',
     rollbackTarget: { layerId: 'flights', id: 'current' },
   });
 
-  assert.deepEqual(result, { entered: false, error: 'tracking exploded' });
+  assert.deepEqual(result, { entered: false, error: 'Вход в кабину сейчас недоступен' });
   assert.deepEqual(calls, [
     'selected:track:selected',
     'selected:stop',

@@ -46,6 +46,7 @@
  * plus CCTV-specific methods (selectCamera, cycleCamera, focusNearest, etc.).
  */
 import * as Cesium from 'cesium';
+import { t } from '../i18n/index.js';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
 import {
   CCTV_ACTIVATION_RESULT,
@@ -227,31 +228,31 @@ const CAMERA_ICON = (() => {
  * plus offsets to place the camera near the POI.
  */
 const CAMERA_SEEDS = [
-  { id: 'nyc-midtown-w', cityId: 'nyc', poiIndex: 1, label: 'Midtown West @ 34th', offsetNorthM: 120, offsetEastM: -70, headingDeg: 206, fovDeg: 74, rangeM: 880, elevationM: 26 },
-  { id: 'nyc-wtc-n', cityId: 'nyc', poiIndex: 2, label: 'WTC North Plaza', offsetNorthM: 95, offsetEastM: 34, headingDeg: 164, fovDeg: 68, rangeM: 760, elevationM: 32 },
-  { id: 'nyc-times-square-ne', cityId: 'nyc', poiIndex: 1, label: 'Times Sq Northeast', offsetNorthM: 230, offsetEastM: 120, headingDeg: 218, fovDeg: 66, rangeM: 640, elevationM: 24 },
+  { id: 'nyc-midtown-w', cityId: 'nyc', poiIndex: 1, label: 'Западный Мидтаун @ 34-я', offsetNorthM: 120, offsetEastM: -70, headingDeg: 206, fovDeg: 74, rangeM: 880, elevationM: 26 },
+  { id: 'nyc-wtc-n', cityId: 'nyc', poiIndex: 2, label: 'Северная площадь WTC', offsetNorthM: 95, offsetEastM: 34, headingDeg: 164, fovDeg: 68, rangeM: 760, elevationM: 32 },
+  { id: 'nyc-times-square-ne', cityId: 'nyc', poiIndex: 1, label: 'Северо-восток Таймс-сквер', offsetNorthM: 230, offsetEastM: 120, headingDeg: 218, fovDeg: 66, rangeM: 640, elevationM: 24 },
 
-  { id: 'sf-market-5th', cityId: 'sf', poiIndex: 2, label: 'Market & 5th', offsetNorthM: -160, offsetEastM: 80, headingDeg: 320, fovDeg: 70, rangeM: 780, elevationM: 20 },
-  { id: 'sf-financial-district', cityId: 'sf', poiIndex: 1, label: 'SF Financial Core', offsetNorthM: 110, offsetEastM: 52, headingDeg: 205, fovDeg: 72, rangeM: 760, elevationM: 24 },
+  { id: 'sf-market-5th', cityId: 'sf', poiIndex: 2, label: 'Маркет и 5-я', offsetNorthM: -160, offsetEastM: 80, headingDeg: 320, fovDeg: 70, rangeM: 780, elevationM: 20 },
+  { id: 'sf-financial-district', cityId: 'sf', poiIndex: 1, label: 'Финансовый центр Сан-Франциско', offsetNorthM: 110, offsetEastM: 52, headingDeg: 205, fovDeg: 72, rangeM: 760, elevationM: 24 },
 
-  { id: 'tokyo-shibuya-scramble', cityId: 'tokyo', poiIndex: 4, label: 'Shibuya Crossing', offsetNorthM: 180, offsetEastM: 46, headingDeg: 18, fovDeg: 82, rangeM: 640, elevationM: 30 },
-  { id: 'tokyo-ginza-core', cityId: 'tokyo', poiIndex: 0, label: 'Ginza Core', offsetNorthM: -180, offsetEastM: 150, headingDeg: 245, fovDeg: 70, rangeM: 690, elevationM: 28 },
-  { id: 'tokyo-asakusa-n', cityId: 'tokyo', poiIndex: 3, label: 'Asakusa North Gate', offsetNorthM: 110, offsetEastM: -65, headingDeg: 192, fovDeg: 68, rangeM: 620, elevationM: 24 },
+  { id: 'tokyo-shibuya-scramble', cityId: 'tokyo', poiIndex: 4, label: 'Перекресток Сибуя', offsetNorthM: 180, offsetEastM: 46, headingDeg: 18, fovDeg: 82, rangeM: 640, elevationM: 30 },
+  { id: 'tokyo-ginza-core', cityId: 'tokyo', poiIndex: 0, label: 'Центр Гиндзы', offsetNorthM: -180, offsetEastM: 150, headingDeg: 245, fovDeg: 70, rangeM: 690, elevationM: 28 },
+  { id: 'tokyo-asakusa-n', cityId: 'tokyo', poiIndex: 3, label: 'Северные ворота Асакусы', offsetNorthM: 110, offsetEastM: -65, headingDeg: 192, fovDeg: 68, rangeM: 620, elevationM: 24 },
 
-  { id: 'london-city-a1', cityId: 'london', poiIndex: 4, label: 'City Cluster A1', offsetNorthM: 80, offsetEastM: 65, headingDeg: 220, fovDeg: 71, rangeM: 720, elevationM: 27 },
-  { id: 'london-soho-core', cityId: 'london', poiIndex: 2, label: 'Soho Core', offsetNorthM: 210, offsetEastM: 120, headingDeg: 206, fovDeg: 70, rangeM: 700, elevationM: 22 },
+  { id: 'london-city-a1', cityId: 'london', poiIndex: 4, label: 'Кластер Сити A1', offsetNorthM: 80, offsetEastM: 65, headingDeg: 220, fovDeg: 71, rangeM: 720, elevationM: 27 },
+  { id: 'london-soho-core', cityId: 'london', poiIndex: 2, label: 'Центр Сохо', offsetNorthM: 210, offsetEastM: 120, headingDeg: 206, fovDeg: 70, rangeM: 700, elevationM: 22 },
 
   { id: 'paris-rivoli', cityId: 'paris', poiIndex: 4, label: 'Rue de Rivoli', offsetNorthM: 55, offsetEastM: 85, headingDeg: 248, fovDeg: 66, rangeM: 640, elevationM: 22 },
-  { id: 'paris-champs-n', cityId: 'paris', poiIndex: 1, label: 'Champs-Élysées North', offsetNorthM: 130, offsetEastM: -38, headingDeg: 175, fovDeg: 68, rangeM: 700, elevationM: 26 },
+  { id: 'paris-champs-n', cityId: 'paris', poiIndex: 1, label: 'Север Елисейских Полей', offsetNorthM: 130, offsetEastM: -38, headingDeg: 175, fovDeg: 68, rangeM: 700, elevationM: 26 },
 
-  { id: 'dc-mall-center', cityId: 'dc', poiIndex: 1, label: 'National Mall Center', offsetNorthM: 120, offsetEastM: 20, headingDeg: 258, fovDeg: 78, rangeM: 940, elevationM: 24 },
-  { id: 'dc-pentagon-s', cityId: 'dc', poiIndex: 3, label: 'Pentagon South', offsetNorthM: -100, offsetEastM: 92, headingDeg: 14, fovDeg: 66, rangeM: 620, elevationM: 21 },
+  { id: 'dc-mall-center', cityId: 'dc', poiIndex: 1, label: 'Центр Национальной аллеи', offsetNorthM: 120, offsetEastM: 20, headingDeg: 258, fovDeg: 78, rangeM: 940, elevationM: 24 },
+  { id: 'dc-pentagon-s', cityId: 'dc', poiIndex: 3, label: 'Юг Пентагона', offsetNorthM: -100, offsetEastM: 92, headingDeg: 14, fovDeg: 66, rangeM: 620, elevationM: 21 },
 
-  { id: 'dubai-difc-loop', cityId: 'dubai', poiIndex: 4, label: 'DIFC Loop', offsetNorthM: 92, offsetEastM: -45, headingDeg: 196, fovDeg: 70, rangeM: 720, elevationM: 26 },
-  { id: 'dubai-downtown-east', cityId: 'dubai', poiIndex: 0, label: 'Downtown East', offsetNorthM: -130, offsetEastM: 190, headingDeg: 322, fovDeg: 72, rangeM: 760, elevationM: 28 },
+  { id: 'dubai-difc-loop', cityId: 'dubai', poiIndex: 4, label: 'Контур DIFC', offsetNorthM: 92, offsetEastM: -45, headingDeg: 196, fovDeg: 70, rangeM: 720, elevationM: 26 },
+  { id: 'dubai-downtown-east', cityId: 'dubai', poiIndex: 0, label: 'Восточный Даунтаун', offsetNorthM: -130, offsetEastM: 190, headingDeg: 322, fovDeg: 72, rangeM: 760, elevationM: 28 },
 
-  { id: 'austin-congress-s', cityId: 'austin', poiIndex: 0, label: 'Congress Southbound', offsetNorthM: -165, offsetEastM: 40, headingDeg: 12, fovDeg: 74, rangeM: 760, elevationM: 24 },
-  { id: 'austin-downtown-west', cityId: 'austin', poiIndex: 1, label: 'Downtown West', offsetNorthM: -120, offsetEastM: -160, headingDeg: 120, fovDeg: 69, rangeM: 700, elevationM: 20 },
+  { id: 'austin-congress-s', cityId: 'austin', poiIndex: 0, label: 'Конгресс-авеню, южное направление', offsetNorthM: -165, offsetEastM: 40, headingDeg: 12, fovDeg: 74, rangeM: 760, elevationM: 24 },
+  { id: 'austin-downtown-west', cityId: 'austin', poiIndex: 1, label: 'Западный Даунтаун', offsetNorthM: -120, offsetEastM: -160, headingDeg: 120, fovDeg: 69, rangeM: 700, elevationM: 20 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -442,7 +443,7 @@ export function createCctvProjectionOverlayEntry({ cameraId, name, position }) {
     paintLane: 'selected',
     collisionGroup: 'ambient-card',
     priority: Number.MAX_SAFE_INTEGER - 1,
-    title: String(name || cameraId || 'CAMERA'),
+    title: String(name || cameraId || 'КАМЕРА'),
     details: [],
     accent: '#6be8ff',
     interactive: false,
@@ -1153,7 +1154,7 @@ function buildCatalogFromSources(rawSources) {
       name: String(source.name || seed?.name || id),
       cityId,
       city: String(source.city || city?.name || seed?.city || 'Global'),
-      provider: String(source.provider || seed?.provider || 'Configured CCTV Source'),
+      provider: String(source.provider || seed?.provider || 'Настроенный источник CCTV'),
       sourceKind: String(source.sourceKind || source.kind || (source.url ? 'configured' : 'seed')).toLowerCase(),
       feedType,
       feedConfigured: typeof source.url === 'string' && !!source.url.trim(),
@@ -3349,8 +3350,8 @@ function buildSummaryText() {
   const active = getActiveRecord();
   if (!active) {
     return _records.length
-      ? `${_records.length} CAMERAS STANDING BY · NO CAMERA SELECTED · CLICK A CAMERA TO ACTIVATE`
-      : 'No cameras available in catalog.';
+      ? `${_records.length} КАМЕР ГОТОВЫ · КАМЕРА НЕ ВЫБРАНА · НАЖМИТЕ НА КАМЕРУ`
+      : 'В каталоге нет доступных камер.';
   }
 
   const area = sectorAreaKm2(active.camera.rangeM, active.camera.fovDeg);
@@ -3359,19 +3360,22 @@ function buildSummaryText() {
   const viewBand = viewKey.split(':')[0] || 'global';
   const health = _healthById.get(active.camera.id) || null;
   const calBadge = deriveCalBadge(active.camera);
+  const viewBandRu = {
+    global: 'ГЛОБАЛЬНЫЙ', regional: 'РЕГИОНАЛЬНЫЙ', city: 'ГОРОДСКОЙ', street: 'УЛИЧНЫЙ',
+  }[viewBand] || viewBand.toUpperCase();
 
   return [
-    `${active.camera.city.toUpperCase()} CCTV`,
+    `${active.camera.city.toUpperCase()} КАМЕРА`,
     `${active.camera.name.toUpperCase()}`,
-    `HDG ${Math.round(active.camera.headingDeg)}°`,
-    `FOV ${Math.round(active.camera.fovDeg)}°`,
-    `COVERAGE ${area.toFixed(2)}km²`,
-    overlapCount > 0 ? `OVERLAP ${overlapCount} cams` : 'ISOLATED VIEW',
-    `PROJ ${_showProjection ? 'MONITOR' : 'OFF'}`,
-    _coverageMode === 'viewshed' ? 'VIEWSHED' : null,
-    `CAL ${calBadge.replace('-', ' ').toUpperCase()}`,
-    health?.sourceKind ? `SRC ${String(health.sourceKind).toUpperCase()}` : `SRC ${String(active.camera.feedType || 'image').toUpperCase()}`,
-    `${viewBand.toUpperCase()} CONTEXT`,
+    `КУРС ${Math.round(active.camera.headingDeg)}°`,
+    `УГОЛ ОБЗОРА ${Math.round(active.camera.fovDeg)}°`,
+    `ЗОНА ${area.toFixed(2)}км²`,
+    overlapCount > 0 ? `ПЕРЕКРЫТИЕ ${overlapCount} КАМЕР` : 'ОТДЕЛЬНЫЙ ОБЗОР',
+    `ПРОЕКЦИЯ ${_showProjection ? 'МОНИТОР' : 'ВЫКЛ'}`,
+    _coverageMode === 'viewshed' ? 'ЗОНА ВИДИМОСТИ' : null,
+    `КАЛИБРОВКА ${calBadge.replace('-', ' ').toUpperCase()}`,
+    health?.sourceKind ? `ИСТОЧНИК ${String(health.sourceKind).toUpperCase()}` : `ИСТОЧНИК ${String(active.camera.feedType || 'image').toUpperCase()}`,
+    `КОНТЕКСТ ${viewBandRu}`,
   ].filter(Boolean).join(' · ');
 }
 
@@ -4164,9 +4168,9 @@ async function syncHealthState(force = false) {
  */
 const cctvLayer = {
   id: 'cctv',
-  name: 'CCTV',
+  name: t('data.layer.cctv'),
   icon: '📹',
-  source: 'CCTV + Street View fallback',
+  source: 'CCTV + резервные изображения Street View',
   updateInterval: DEFAULT_UPDATE_INTERVAL_MS,
 
   /**

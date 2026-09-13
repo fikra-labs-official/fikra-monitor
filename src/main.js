@@ -32,6 +32,7 @@ import {
 } from './renderGovernor.js';
 import { installScopeMask } from './scopeMask.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
+import { t } from './i18n/index.js';
 import { initKeySetup } from './keySetup.js';
 import { loadPhotorealisticTileset } from './mapStartup.js';
 
@@ -44,27 +45,24 @@ initLogoGaze();
  * @returns {string} best-effort error description
  */
 function describeError(error) {
-  if (!error) return 'Unknown initialization error';
+  if (!error) return t('startup.unknownError');
+  let message = '';
   if (error instanceof Error) {
-    if (error.message && error.message.trim()) return error.message.trim();
-    return error.name || 'Initialization error';
+    message = error.message?.trim() || '';
+  } else if (typeof error === 'string') {
+    message = error.trim();
+  } else if (typeof error === 'object') {
+    message = String(error.message || error.error || '').trim();
   }
-  if (typeof error === 'string' && error.trim()) return error.trim();
-  if (typeof error === 'object') {
-    const maybeMessage = String(error.message || error.error || '').trim();
-    if (maybeMessage) return maybeMessage;
-    try {
-      const serialized = JSON.stringify(error);
-      if (serialized && serialized !== '{}') return serialized;
-    } catch {
-      // ignore serialization error
-    }
-  }
-  return String(error);
+  if (/[А-Яа-яЁё]/.test(message)) return message;
+  const status = message.match(/\b(?:HTTP\s*)?(\d{3})\b/i)?.[1];
+  return status
+    ? t('startup.externalStatus', { status })
+    : t('startup.externalError');
 }
 
 /**
- * GOD'S EYE VIEW — Main Entry Point
+ * FIKRA MONITOR — Main Entry Point
  * Initializes CesiumJS with Google Photorealistic 3D Tiles,
  * style system, intelligence HUD, location presets, and share links.
  */
@@ -73,12 +71,18 @@ async function init() {
   const loaderStatus = loadingScreen.querySelector('.loader-status');
 
   try {
-    loaderStatus.textContent = 'Configuring viewer...';
+    loaderStatus.textContent = t('startup.configuringViewer');
 
     // A direct Google key provides Google 3D plus GEV place search. Cesium ion
     // can host the same 3D tiles and also powers Bing/world-terrain stacks.
     const cesiumToken = import.meta.env.CESIUM_ION_TOKEN;
     const googleApiKey = import.meta.env.GOOGLE_MAPS_API_KEY;
+    if (cesiumToken) {
+      Cesium.Ion.defaultAccessToken = cesiumToken;
+    } else {
+      // CesiumJS attribution remains; the ion service brand applies to ion content.
+      Cesium.CreditDisplay.cesiumCredit = new Cesium.Credit('', true);
+    }
     if (googleApiKey) window.__GOOGLE_MAPS_API_KEY__ = googleApiKey;
 
     // Create the Cesium viewer with minimal chrome
@@ -97,7 +101,8 @@ async function init() {
       baseLayer: false,
       // Visible attribution container — Google Maps / 3D Tiles credits are
       // required by Google's Terms of Service, so they must be shown (styled
-      // subtly via #cesium-credits). The credit line stays visible in
+      // subtly via #cesium-credits). Cesium ion keeps its own logo whenever
+      // ion content is configured. The credit line stays visible in
       // clean-view AND recording modes too (ToS requires attribution while the
       // content is displayed — those are the exact modes used to record
       // demos), including the "Data attribution" link that opens the per-layer
@@ -146,8 +151,8 @@ async function init() {
     viewer.scene.skyAtmosphere.brightnessShift = -0.08;
 
     loaderStatus.textContent = googleApiKey || cesiumToken
-      ? 'Loading Google 3D Tiles...'
-      : 'Loading the keyless globe...';
+      ? t('startup.loadingGoogleTiles')
+      : 'Загрузка глобуса без API-ключей…';
     const photoreal = await loadPhotorealisticTileset(Cesium, {
       googleApiKey,
       cesiumToken,
@@ -164,12 +169,12 @@ async function init() {
         const tileError = photoreal.errors.at(-1);
         console.warn('[Init] Google 3D Tiles unavailable, using the keyless globe:', tileError);
         const tileErrorDetail = describeError(tileError);
-        loaderStatus.textContent = `Google 3D Tiles unavailable (${tileErrorDetail}). Loading the keyless globe...`;
+        loaderStatus.textContent = t('startup.googleTilesFallback', { detail: tileErrorDetail });
       }
       viewer.scene.globe.show = true;
     }
 
-    loaderStatus.textContent = 'Initializing systems...';
+    loaderStatus.textContent = t('startup.initializingSystems');
 
     const mapStackController = new MapStackController(viewer, {
       googleTileset: tileset,
@@ -197,10 +202,10 @@ async function init() {
 
     // If no share link state, do default fly-to Austin
     if (!styleManager.hasShareState) {
-      loaderStatus.textContent = 'Flying to Austin, TX...';
+      loaderStatus.textContent = t('startup.flyingToAustin');
       flyToAustin(viewer);
     } else {
-      loaderStatus.textContent = 'Restoring shared view...';
+      loaderStatus.textContent = t('startup.restoringSharedView');
     }
 
     // Initialize data layer manager
@@ -329,8 +334,8 @@ async function init() {
     window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
 
   } catch (error) {
-    console.error("God's Eye View initialization failed:", error);
-    loaderStatus.textContent = `Error: ${describeError(error)}`;
+    console.error('Fikra Monitor initialization failed:', error);
+    loaderStatus.textContent = t('startup.failure', { detail: describeError(error) });
     loaderStatus.style.color = '#ff4444';
   }
 }

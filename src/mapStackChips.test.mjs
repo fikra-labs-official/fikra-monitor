@@ -167,7 +167,7 @@ test('keyless ion stacks stay focusable, aria-disabled, and say why', () => {
   assert.equal(bingAerial.getAttribute('aria-disabled'), 'true');
   assert.equal(
     bingAerial.getAttribute('aria-label'),
-    'Bing Aerial unavailable: Cesium ion token required for Bing stacks',
+    'Bing Aerial недоступен: Cesium ion token required for Bing stacks',
   );
   assert.ok(bingAerial.classList.contains('unavailable'));
   assert.equal(bingAerial.title, 'Cesium ion token required for Bing stacks');
@@ -192,7 +192,7 @@ test('a non-ion stack that fails never claims an ion token is required', () => {
 
   const google = container.children[0];
   assert.equal(google.getAttribute('aria-disabled'), 'true');
-  assert.equal(google.getAttribute('aria-label'), 'Google 3D unavailable: Google 3D is unavailable');
+  assert.equal(google.getAttribute('aria-label'), 'Google 3D недоступен: Google 3D is unavailable');
   assert.equal(chipText(google), 'Google 3D', 'no ION badge on a stack that does not need ion');
   assert.equal(google.title, 'Google 3D is unavailable');
   assert.equal(chipText(container.children[1]), 'Bing Aerial', 'available ion stacks stay unbadged');
@@ -219,13 +219,13 @@ test('models carry the stack\'s own reason and never invent an active chip', () 
     [
       {
         requirement: 'ION',
-        unavailableHint: 'Cesium ion token required',
-        title: 'Cesium ion token required',
+        unavailableHint: 'Для карт Bing нужен токен Cesium ion',
+        title: 'Для карт Bing нужен токен Cesium ion',
       },
       {
         requirement: '',
-        unavailableHint: 'Hybrid is unavailable',
-        title: 'Hybrid is unavailable',
+        unavailableHint: 'Источник карты «Hybrid» недоступен',
+        title: 'Источник карты «Hybrid» недоступен',
       },
     ],
   );
@@ -334,10 +334,10 @@ test('the Visual Presets tray owns Map Source and the retired left panel is abse
   assert.doesNotMatch(html, /map-stack-select/, 'the SOURCE dropdown is replaced by the chip row');
   assert.match(
     html,
-    /<section class="map-source-section"[\s\S]*?<div id="map-stack-chips" class="map-stack-chip-row" role="group" aria-label="Map source"><\/div>/,
+    /<section class="map-source-section"[\s\S]*?<div id="map-stack-chips" class="map-stack-chip-row" role="group" aria-label="Источник карты"><\/div>/,
   );
   assert.doesNotMatch(html, /id="stack-panel"/, 'the duplicate left MAP STACK panel is retired');
-  assert.match(html, /id="map-source-label">MAP SOURCE<[\s\S]*?id="map-stack-status"/);
+  assert.match(html, /id="map-source-label">ИСТОЧНИК КАРТЫ<[\s\S]*?id="map-stack-status"/);
   assert.match(
     html,
     /<button id="control-panel-toggle"[\s\S]*?data-dock-toggle-target="control-panel"[\s\S]*?aria-controls="control-panel-popover"/,

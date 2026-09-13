@@ -1,26 +1,27 @@
 import * as Cesium from 'cesium';
 import { governorRequestRender } from './renderGovernor.js';
+import { t } from './i18n/index.js';
 
 export const MAP_STACKS = [
   {
     id: 'photoreal',
-    label: 'Google 3D',
+    label: t('map.google3d'),
     shortLabel: '3D',
     kind: 'photoreal',
     requiresIon: false,
   },
   {
     id: 'bing-aerial',
-    label: 'Bing Aerial',
-    shortLabel: 'Aerial',
+    label: t('map.bingAerial'),
+    shortLabel: t('map.short.aerial'),
     kind: 'ion',
     style: Cesium.IonWorldImageryStyle.AERIAL,
     requiresIon: true,
   },
   {
     id: 'bing-labels',
-    label: 'Bing Labels',
-    shortLabel: 'Labels',
+    label: t('map.bingLabels'),
+    shortLabel: t('map.short.labels'),
     kind: 'ion',
     style: Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS,
     requiresIon: true,
@@ -34,7 +35,7 @@ export const MAP_STACKS = [
   },
   {
     id: 'osm',
-    label: 'OSM',
+    label: t('map.osm'),
     shortLabel: 'OSM',
     kind: 'osm',
     requiresIon: false,
@@ -141,8 +142,8 @@ export class MapStackController {
    */
   _unavailableReason(stack) {
     return stack?.requiresIon
-      ? 'Cesium ion token required for Bing stacks'
-      : `${stack?.label || 'This map stack'} is unavailable`;
+      ? t('map.ionRequired')
+      : t('map.stackUnavailable', { label: stack?.label || t('map.osm') });
   }
 
   getStack(id) {

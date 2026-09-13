@@ -1,5 +1,7 @@
 # God's Eye View Current State
 
+> Historical upstream notes, not Fikra Monitor setup instructions. For this fork use [README](../README.md), [Russian setup](setup.ru.md) or [English setup](setup.en.md). In particular, LAN/public sharing described below is not supported by this fork.
+
 Updated: August 24, 2026
 
 > **2026-08-23 — first-run mission launcher** (`src/firstRunExperience.js`,

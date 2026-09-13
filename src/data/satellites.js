@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { t } from '../i18n/index.js';
 import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLong, degreesLat } from 'satellite.js';
 import { registerPickOwner, unregisterPickOwner, isOwnedByOtherLayer, resolvePickId } from './pickRegistry.js';
 import { findNextIssPass } from './issPass.js';
@@ -758,7 +759,7 @@ function _getTrackedFramePosition() {
     _refreshTrackedSubjectContext();
     if (clusterChanged) _syncIssOverlay();
     const name = sat.name?.trim() || `SAT-${_trackedNorad}`;
-    const altitudeText = `${Math.round(pos.altitude / 1000)} km · NORAD ${_trackedNorad}`;
+    const altitudeText = `${Math.round(pos.altitude / 1000)} км · NORAD ${_trackedNorad}`;
     const labelWidthPx = Math.max(name.length, altitudeText.length) * 7.8 + 20;
     const labelHeightPx = 2 * 13 + 12;
     const trackedPointDiameterPx = 14 + 4; // point plus its 2 px outline on both sides
@@ -813,7 +814,7 @@ function _contextSubjectMetadata(noradId, position = null) {
   return {
     id: String(noradId),
     layerId: 'satellites',
-    layerName: 'Satellites',
+    layerName: t('data.layer.satellites'),
     source: 'CelesTrak',
     label: name,
     latitude: pos.latitude,
@@ -825,7 +826,7 @@ function _contextSubjectMetadata(noradId, position = null) {
       operator: '',
       noradId: String(noradId),
       class: satelliteClassLabel(sat.group, { isIss: noradId === ISS_NORAD }),
-      altitude: altitudeKm === null ? '' : `${altitudeKm.toLocaleString('en-US')} km`,
+      altitude: altitudeKm === null ? '' : `${altitudeKm.toLocaleString('ru-RU')} км`,
     },
   };
 }
@@ -926,7 +927,7 @@ function _updateTrackedSatelliteLabelModel(fallbackAltitudeM = null) {
   const sat = _catalog.get(_trackedNorad);
   const title = sat?.name?.trim() || `SAT-${_trackedNorad}`;
   const altitudeM = _trackedFrameGeo?.altitude ?? fallbackAltitudeM;
-  const detail = `${Number.isFinite(altitudeM) ? Math.round(altitudeM / 1000) : '?'} km · NORAD ${_trackedNorad}`;
+  const detail = `${Number.isFinite(altitudeM) ? Math.round(altitudeM / 1000) : '?'} км · NORAD ${_trackedNorad}`;
   // Class leads the detail block: it is what tells the operator WHAT they are
   // looking at, and it stays readable under the IR styles that flatten the
   // dot colors to a single channel (the card is painted above post-FX).
@@ -1517,7 +1518,7 @@ export function applySatellitePointFocusDeemphasis({
 
 const satellitesLayer = {
   id: 'satellites',
-  name: 'Satellites',
+  name: t('data.layer.satellites'),
   icon: '🛰️',
   source: 'CelesTrak',
   updateInterval: 0, // We use preRender for real-time updates, not interval polling
@@ -1655,7 +1656,7 @@ const satellitesLayer = {
       // the chip still read "just now". Keep the existing (stale) catalog on
       // screen and surface the outage instead — do NOT stamp _lastUpdate.
       if (results.every(r => !r.ok)) {
-        _lastError = 'CelesTrak unreachable';
+        _lastError = 'CelesTrak не отвечает';
         console.warn('[Data:Satellites] All CelesTrak groups failed — keeping existing catalog, surfacing outage');
         // Re-apply dense mode is skipped (no fresh core catalog); tracking untouched.
         return;
@@ -2145,14 +2146,14 @@ const satellitesLayer = {
     const loading = _denseStatus === 'loading';
     const failed = _denseStatus === 'failed';
     const active = _params.catalog === 'dense' && _denseStatus === 'ready';
-    let title = 'Add the full Starlink broadband shell (thousands of extra points)';
-    if (loading) title = 'Loading the Starlink shell…';
-    else if (failed) title = `Starlink ${_denseError || 'load failed'} — click to retry`;
-    else if (active) title = 'Showing the full Starlink shell — click for the core catalog only';
+    let title = 'Добавить полную группировку Starlink (тысячи дополнительных точек)';
+    if (loading) title = 'Загрузка группировки Starlink...';
+    else if (failed) title = `Starlink: ${_denseError || 'ошибка загрузки'}. Нажмите, чтобы повторить`;
+    else if (active) title = 'Показана полная группировка Starlink. Нажмите, чтобы оставить только основной каталог';
     return {
       chips: [{
         id: 'catalog',
-        label: loading ? 'DENSE ···' : (failed ? 'DENSE ✕' : 'DENSE'),
+        label: loading ? 'ПОЛНЫЙ ···' : (failed ? 'ПОЛНЫЙ ✕' : 'ПОЛНЫЙ'),
         active,
         busy: loading,
         disabled: loading,
@@ -2179,7 +2180,7 @@ const satellitesLayer = {
       count: _count,
       lastUpdate: _lastUpdate,
       stale: false,
-      status: _lastError === 'CelesTrak unreachable'
+      status: _lastError === 'CelesTrak не отвечает'
         ? 'unavailable'
         : (_lastError ? 'degraded' : 'nominal'),
       error: _lastError,

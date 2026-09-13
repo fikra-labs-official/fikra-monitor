@@ -75,7 +75,7 @@ function linkAbort(controller, externalSignal) {
  * @param {number} [opts.longitude]   Explicit longitude.
  * @param {boolean} [opts.footprint]  Try to trace the real OSM outline ring.
  * @param {string} [opts.entityKind]  Voice model's entity FACT ('building'|'compound'|
- *                                    'district'|'street'|'point_feature') — refines scope
+ *                                    'district'|'admin_region'|'street'|'point_feature') — refines scope
  *                                    routing and the point-first contract; never a style choice.
  * @param {boolean} [opts.deferFootprint]  Progressive mode: return the anchor immediately
  *                                    (ring:null) plus a `resolveOutline()` continuation the
@@ -91,7 +91,8 @@ function linkAbort(controller, externalSignal) {
  */
 export async function resolveAnnotationTarget({
   viewer, target, latitude, longitude, footprint = false, intent = 'the_thing',
-  entityKind = null, labelHint = null, deferFootprint = false, screenX, screenY, signal,
+  entityKind = null, labelHint = null, deferFootprint = false, screenX, screenY,
+  allowRemote = false, preferPlaces = false, signal,
 }) {
   let lon = Number(longitude);
   let lat = Number(latitude);
@@ -112,17 +113,37 @@ export async function resolveAnnotationTarget({
   const trace = { query: String(target || '').trim(), places: 'skipped', geocode: 'none', osmSnap: 'skipped' };
   // Guard bypass is an ASK-SIDE fact. A returned admin type can be a wrong match
   // ("the Texas Capitol" → the state), so geocode types must never grant it.
-  const bypassNearViewGuards = Boolean(adminScopeFromAsk(target, entityKind));
+  const bypassNearViewGuards = Boolean(allowRemote || adminScopeFromAsk(target, entityKind));
 
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     const query = String(target || '').trim();
     if (query) {
       const center = pickWorldFromScreen(viewer, 0.5, 0.5) || viewportProximity(viewer);
+      // A deliberate fly-to annotation is a destination search, not a request to
+      // reinterpret a vague name near the current camera. Resolve its full query
+      // globally through Places first so "Emaar office, Dubai" can work while the
+      // viewer is still in Austin. Ordinary annotations keep the near-view guard.
+      if (preferPlaces) {
+        const placeHit = await placesTextSearch(query, null, null, null, signal);
+        if (placeHit) {
+          lat = placeHit.lat;
+          lon = placeHit.lon;
+          label = placeHit.label;
+          placeViewport = placeHit.viewport || null;
+          placesPrimary = placeHit.label;
+          placeTypes = placeHit.types || [];
+          source = 'places';
+          trace.places = `${placeHit.lat.toFixed(5)},${placeHit.lon.toFixed(5)} (global)`;
+        } else {
+          trace.places = 'miss';
+        }
+      }
       // Monument / grounds names scatter under Geocoding — try a view-biased Places Text Search FIRST.
       // A hit near the view centre is trusted (skips the proximity gate, like the osm-local snap); on a
       // miss we fall through to geocode + fetchLocalMonument below. The model's entityKind counts too:
       // a point_feature by fact ("Heroes of the Alamo" — no monument word) deserves the same path.
-      if (center && (isMonumentLikeQuery(query) || isGroundsLikeQuery(query) || entityKind === 'point_feature')) {
+      if (source !== 'places' && trace.places === 'skipped' && center
+          && (isMonumentLikeQuery(query) || isGroundsLikeQuery(query) || entityKind === 'point_feature')) {
         const placeHit = await placesTextSearch(query, center.lat, center.lon, 6000, signal);
         if (placeHit) {
           trace.places = `${placeHit.lat.toFixed(5)},${placeHit.lon.toFixed(5)}`;
@@ -140,7 +161,7 @@ export async function resolveAnnotationTarget({
         }
       }
       if (source !== 'places') {
-        const geocoded = await geocodePlace(query, viewportBias(viewer), signal);
+        const geocoded = await geocodePlace(query, allowRemote ? null : viewportBias(viewer), signal);
         if (geocoded) {
           lat = geocoded.lat;
           lon = geocoded.lon;
@@ -263,11 +284,16 @@ export async function resolveAnnotationTarget({
   const usablePrimary = geocodePrimary && /[a-z]/i.test(geocodePrimary) ? geocodePrimary : null;
   const usablePlaces = placesPrimary && /[a-z]/i.test(placesPrimary) ? placesPrimary : null;
   const matchName = usablePrimary || usablePlaces || String(target || '').trim();
-  // Scope-route on the geocoder's type so we fetch the RIGHT OSM feature at the right size:
+  // Scope-route on the provider's type so we fetch the RIGHT OSM feature at the right size:
   // an admin boundary for a city/state, the enclosing compound for a mall/campus, a single
   // building for a premise. The voice model's entityKind (an entity FACT) refines an
   // unresolved 'auto' scope only — real geocode types always win.
-  const baseScope = refineScope(scopeFromTypes(geocodeTypes), entityKind);
+  // Places is the authoritative classifier on the remote/flyTo path, where no
+  // Geocoding result exists. Preserve the same data-over-model precedence as
+  // Geocoding so an administrative_area_level_1 hit cannot be downgraded to a
+  // neighborhood by a coarse `entityKind: district` hint.
+  const resolvedTypes = geocodeTypes.length ? geocodeTypes : placeTypes;
+  const baseScope = refineScope(scopeFromTypes(resolvedTypes), entityKind);
   // Point-like targets (monuments/statues/memorials/…) resolve POINT-FIRST: only an
   // (almost) exactly-named, monument-scale polygon may replace the point; a nearby polygon
   // sharing locality words must not (docs/field-test-rootcause-2026-06-30.md §1).
@@ -295,6 +321,11 @@ export async function resolveAnnotationTarget({
     let scope = baseScope;
     const isAdmin = scope === 'country' || scope === 'state' || scope === 'county' || scope === 'city';
     const around = intent === 'around_the_thing';
+    const remoteDistrictFallback = () => (
+      allowRemote && entityKind === 'district'
+        ? synthesizeBufferedArea(lat, lon, districtRadiusFromViewport(placeViewport))
+        : undefined
+    );
     // FIRST rung: bundled Natural Earth physical region (Alps, Rockies, Sahara,
     // Gulf of Mexico …) — deterministic, OFFLINE, instant; mirrors the
     // neighborhood-pack rung's philosophy. Two guards: (1) the ASK must NAME a
@@ -338,7 +369,7 @@ export async function resolveAnnotationTarget({
     } else if (isAdmin) {
       // Pure admin: only an admin boundary is correct — never fall back to a
       // building/landuse (a city is never a single building).
-      fp = await fetchAdminArea(lat, lon, matchName, scope, signal);
+      fp = await fetchAdminArea(lat, lon, matchName, scope, signal, target || matchName);
     } else if (scope === 'neighborhood') {
       // FIRST: a bundled neighborhood polygon (reliable, deterministic, OFFLINE — no live
       // Overpass). Covered neighborhoods (e.g. SF: Chinatown/Marina/Mission/Presidio)
@@ -348,8 +379,9 @@ export async function resolveAnnotationTarget({
       if (ext) fp = { ring: ext.ring, kind: 'area', heightM: null };
       // Else fall through to the OSM admin/place → named-landuse → synthesis ladder. Each
       // returns a footprint, null (definitively no polygon), or undefined (transient
-      // upstream failure). Synthesize a blob (the "Mission" problem, research §3b) ONLY
-      // when BOTH sources DEFINITIVELY have no polygon — never on a transient blip.
+      // upstream failure). Normal local marks stay retryable on a transient. An explicit
+      // remote district flight gets a dashed Places-viewport fallback so the requested
+      // boundary never degrades to an unexplained point.
       if (!fp) {
         let adminFp = await fetchAdminArea(lat, lon, matchName, scope, signal);
         // A neighborhood whose canonical name carries a city suffix ("Presidio of San
@@ -372,18 +404,23 @@ export async function resolveAnnotationTarget({
             // grabbing a building; the scope cap below rejects anything oversized.
             const looseFp = await fetchFootprint(lat, lon, matchName, scope, signal, 'loose');
             if (looseFp && looseFp.kind !== 'building') fp = looseFp;
-            else if (looseFp === null) fp = synthesizeBufferedArea(lat, lon, NEIGHBORHOOD_RADIUS_M);
-            else if (looseFp === undefined) fp = undefined; // transient → honest point, retryable
+            else if (looseFp === null) {
+              fp = synthesizeBufferedArea(lat, lon, districtRadiusFromViewport(placeViewport));
+            } else if (looseFp === undefined) {
+              fp = remoteDistrictFallback();
+            } else {
+              fp = remoteDistrictFallback() ?? null;
+            }
             // a building (wrong feature) → leave fp null (honest point) rather than a
             // misleading blob — a re-run would only return the same cached building.
           } else {
-            fp = undefined; // transient strict lookup → honest point, retryable
+            fp = remoteDistrictFallback();
           }
         } else {
           // adminFp === undefined (transient in the HIGHER-priority admin/place leg): do NOT
-          // fall through to a lower-priority landuse — a real boundary that was momentarily
-          // unavailable must not be replaced by a lesser polygon. Honest point, retryable.
-          fp = undefined;
+          // fall through to lower-priority landuse. Local marks stay retryable; an explicit
+          // remote district gets the clearly approximate dashed viewport fallback.
+          fp = remoteDistrictFallback();
         }
       }
     } else if (scope === 'street') {
@@ -525,6 +562,8 @@ const PLACES_MAX_DISTANCE_M = 8000;
 // Synthesis radii (m) per osm-place-resolution-research.md §8.5. Used when OSM has only
 // a label point (most US neighborhoods) or the user asks for the area AROUND a landmark.
 const NEIGHBORHOOD_RADIUS_M = 750; // urban-neighborhood blob (600–900 m band)
+const DISTRICT_RADIUS_MIN_M = 500;
+const DISTRICT_RADIUS_MAX_M = 15_000;
 const AROUND_LANDMARK_RADIUS_M = 400; // "the area around X" — a few blocks (300–500 m)
 const GROUNDS_RADIUS_M = 300; // "X grounds/compound/campus" loose disc when OSM has no polygon
 const GROUNDS_RADIUS_MIN_M = 150; // viewport-derived grounds disc is clamped to this band so a tiny
@@ -576,6 +615,19 @@ function groundsRadiusFromViewport(viewport) {
   return Math.max(GROUNDS_RADIUS_MIN_M, Math.min(GROUNDS_RADIUS_MAX_M, r));
 }
 
+/** Size an honest dashed district fallback from Google's viewport when OSM is unavailable. */
+function districtRadiusFromViewport(viewport) {
+  const lo = viewport?.low;
+  const hi = viewport?.high;
+  if (!lo || !hi
+      || ![lo.latitude, lo.longitude, hi.latitude, hi.longitude].every(Number.isFinite)) {
+    return NEIGHBORHOOD_RADIUS_M;
+  }
+  const radiusM = approximateDistanceM(lo.latitude, lo.longitude, hi.latitude, hi.longitude) / 2;
+  if (!Number.isFinite(radiusM) || radiusM <= 0) return NEIGHBORHOOD_RADIUS_M;
+  return Math.max(DISTRICT_RADIUS_MIN_M, Math.min(DISTRICT_RADIUS_MAX_M, radiusM));
+}
+
 function exceedsScopeArea(fp, scope) {
   const cap = SCOPE_AREA_CAP_M2[scope];
   if (!cap) return false;
@@ -603,14 +655,11 @@ function ringAreaM2(ring) {
  * viewport so "the marina" resolves near where the user is looking.
  */
 async function geocodePlace(query, biasRect, signal) {
-  const apiKey = window.__GOOGLE_MAPS_API_KEY__ || import.meta.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) return null;
-
   const cacheKey = `${query.toLowerCase()}|${biasRect || ''}`;
   const cached = cacheRead(geocodeCache, cacheKey);
   if (cached !== undefined) return cached;
 
-  let url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`;
+  let url = `/api/google/geocode?address=${encodeURIComponent(query)}&language=ru`;
   if (biasRect) url += `&bounds=${biasRect}`;
 
   try {
@@ -666,23 +715,27 @@ const placesCache = new Map(); // Text Search hits, keyed by query + rounded vie
  * returns the closest result, or null on no-match / transient failure. The
  * `viewport` (a lat/lng bounding box framing the place, or null) is carried
  * through so the resolver can SIZE a fallback grounds disc to the real feature.
- * @returns {Promise<null | { lat:number, lon:number, label:string|null, distanceM:number,
+ * Passing no centre performs an unbiased global search for an explicit destination.
+ * @returns {Promise<null | { lat:number, lon:number, label:string|null, distanceM:number|null,
  *   viewport:{low:{latitude:number,longitude:number},high:{latitude:number,longitude:number}}|null }>}
  */
 async function placesTextSearch(query, centerLat, centerLon, radiusM, signal) {
   const q = String(query || '').trim();
-  if (!q || !Number.isFinite(centerLat) || !Number.isFinite(centerLon)) return null;
+  const hasCenter = Number.isFinite(centerLat) && Number.isFinite(centerLon);
+  if (!q) return null;
 
-  const cacheKey = `${q.toLowerCase()}|${centerLat.toFixed(3)},${centerLon.toFixed(3)}|${radiusM}`;
+  const cacheKey = hasCenter
+    ? `${q.toLowerCase()}|${centerLat.toFixed(3)},${centerLon.toFixed(3)}|${radiusM}`
+    : `${q.toLowerCase()}|global`;
   const cached = cacheRead(placesCache, cacheKey);
   if (cached !== undefined) return cached;
 
-  const params = new URLSearchParams({
-    q,
-    lat: String(centerLat),
-    lon: String(centerLon),
-    radiusM: String(radiusM),
-  });
+  const params = new URLSearchParams({ q });
+  if (hasCenter) {
+    params.set('lat', String(centerLat));
+    params.set('lon', String(centerLon));
+    params.set('radiusM', String(radiusM));
+  }
   try {
     const response = await fetch(`/api/google/text-search?${params}`, { signal });
     if (!response.ok) { negCache(placesCache, cacheKey, signal, false); return null; } // transient
@@ -695,7 +748,9 @@ async function placesTextSearch(query, centerLat, centerLon, radiusM, signal) {
       lat: hit.latitude,
       lon: hit.longitude,
       label: hit.name || null,
-      distanceM: approximateDistanceM(centerLat, centerLon, hit.latitude, hit.longitude),
+      distanceM: hasCenter
+        ? approximateDistanceM(centerLat, centerLon, hit.latitude, hit.longitude)
+        : null,
       viewport: hit.viewport || null,
       // Entity identity/classification — the proxy already pays for these in its field
       // mask, so keep them: `primaryType`/`types` classify the feature (point-like
@@ -762,6 +817,7 @@ function scopeFromTypes(types) {
 function adminScopeFromAsk(target, entityKind) {
   if (typeof entityKind === 'string' && entityKind.trim()) {
     const kind = entityKind.trim().toLowerCase();
+    if (kind === 'admin_region') return 'state';
     return kind === 'country' || kind === 'state' || kind === 'county' ? kind : null;
   }
 
@@ -775,9 +831,8 @@ function adminScopeFromAsk(target, entityKind) {
 /**
  * Refine an UNRESOLVED ('auto') scope with the voice model's `entityKind` — the model's
  * statement of what kind of thing the target IS (an entity fact from the conversation,
- * not a render choice). Real geocode types are data and always win; entityKind only
- * fills the gap they leave (Places-sourced anchors never have geocode types, so they
- * are always 'auto' without this). 'point_feature' is handled by the point-first
+ * not a render choice). Real geocode/Places types are data and always win; entityKind
+ * only fills the gap when the provider has no recognized type. 'point_feature' is handled by the point-first
  * contract (isPointLikeTarget), not by scope. Exported for tests.
  */
 export function refineScope(scope, entityKind) {
@@ -785,6 +840,7 @@ export function refineScope(scope, entityKind) {
   if (entityKind === 'building') return 'building';
   if (entityKind === 'compound') return 'compound';
   if (entityKind === 'district') return 'neighborhood';
+  if (entityKind === 'admin_region') return 'state';
   if (entityKind === 'street') return 'street';
   return scope;
 }
@@ -839,6 +895,45 @@ async function overpassJson(query, timeoutMs = 14000, signal) {
   }
 }
 
+/** Resolve a country/region/city polygon through the local, cached Nominatim proxy. */
+async function fetchNominatimAdminArea(query, scope, signal) {
+  const q = String(query || '').trim();
+  if (!q || !['country', 'state', 'county', 'city'].includes(scope)) return null;
+
+  const controller = new AbortController();
+  const detach = linkAbort(controller, signal);
+  const timer = window.setTimeout(() => controller.abort(), 15000);
+  try {
+    const params = new URLSearchParams({ q, scope });
+    const res = await fetch(`/api/osm/admin-boundary?${params}`, { signal: controller.signal });
+    const retryAfter = res.headers?.get?.('Retry-After');
+    if (res.status === 429) {
+      return { rateLimited: true, retryAfterMs: parseRetryAfterMs(retryAfter) };
+    }
+    if (!res.ok) return undefined;
+    const data = await res.json();
+    if (!Array.isArray(data?.ring)) return null;
+    let ring = closeRing(data.ring.map((point) => {
+      const lon = Number(point?.[0]);
+      const lat = Number(point?.[1]);
+      return Number.isFinite(lon) && Number.isFinite(lat)
+        && lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90
+        ? [lon, lat]
+        : null;
+    }).filter(Boolean));
+    if (ring.length < 4) return null;
+    const tolM = scope === 'city' ? 12 : scope === 'county' ? 40 : 120;
+    ring = simplifyRing(ring, tolM);
+    const fp = { ring, kind: 'area', heightM: null };
+    return exceedsScopeArea(fp, scope) ? null : fp;
+  } catch {
+    return undefined;
+  } finally {
+    window.clearTimeout(timer);
+    detach();
+  }
+}
+
 /**
  * Resolve an administrative boundary (country/state/county/city/neighborhood).
  * `is_in(point)` returns every admin area containing the point at all levels;
@@ -846,7 +941,7 @@ async function overpassJson(query, timeoutMs = 14000, signal) {
  * to know each country's admin_level mapping), pivot it to its relation, and
  * simplify the outline so even a state/country draws cleanly.
  */
-async function fetchAdminArea(lat, lon, query, scope, signal) {
+async function fetchAdminArea(lat, lon, query, scope, signal, searchQuery = query) {
   // Scope changes both the name-matching bias and the fallback strategy (only
   // neighborhood runs the place=/named-landuse fallback), so it must be in the key —
   // else a city-scope definitive null would suppress a later neighborhood lookup's
@@ -854,6 +949,18 @@ async function fetchAdminArea(lat, lon, query, scope, signal) {
   const cacheKey = `admin|${scope}|${lat.toFixed(4)},${lon.toFixed(4)}|${query.toLowerCase()}`;
   const cachedFp = cacheRead(footprintCache, cacheKey);
   if (cachedFp !== undefined) return cachedFp;
+
+  // Nominatim returns the administrative polygon directly and is much faster for
+  // countries, regions, and cities. Keep the existing Overpass relation lookup as
+  // a fallback for temporary Nominatim failures or a definitive no-match.
+  if (scope !== 'neighborhood') {
+    const nominatim = await fetchNominatimAdminArea(searchQuery, scope, signal);
+    if (isRateLimitedOutcome(nominatim)) return nominatim;
+    if (nominatim) {
+      cacheWrite(footprintCache, cacheKey, nominatim);
+      return nominatim;
+    }
+  }
 
   const candidates = await overpassJson(
     `[out:json][timeout:25];is_in(${lat},${lon})->.a;area.a["boundary"="administrative"]["admin_level"];out tags;`,
@@ -872,8 +979,8 @@ async function fetchAdminArea(lat, lon, query, scope, signal) {
     // official_name ("City and County of San Francisco") otherwise DILUTES the real
     // boundary's completeness and lets a less-specific duplicate ("San Francisco County")
     // win — which then has no backing relation and collapses the whole resolution to a dot.
-    const coreWords = normalizedWords([el.tags.name, el.tags['name:en']].filter(Boolean).join(' '));
-    const fullWords = normalizedWords([el.tags.name, el.tags['name:en'], el.tags.official_name].filter(Boolean).join(' '));
+    const coreWords = normalizedWords([el.tags.name, el.tags['name:en'], el.tags['name:ru']].filter(Boolean).join(' '));
+    const fullWords = normalizedWords([el.tags.name, el.tags['name:en'], el.tags['name:ru'], el.tags.official_name].filter(Boolean).join(' '));
     const overlap = wordOverlap(queryWords, fullWords);
     if (!overlap) continue;
     const intentCoverage = queryWords.size ? overlap / queryWords.size : 0;
@@ -1008,7 +1115,7 @@ async function fetchPlaceArea(lat, lon, query, signal) {
     const coords = elementCoordinates(el);
     if (coords.length < 3) continue;
     const tags = el.tags || {};
-    const nameWords = normalizedWords([tags.name, tags['name:en']].filter(Boolean).join(' '));
+    const nameWords = normalizedWords([tags.name, tags['name:en'], tags['name:ru']].filter(Boolean).join(' '));
     const overlap = wordOverlap(queryWords, nameWords);
     if (!overlap) continue;
     // The OSM place name is usually just the neighborhood ("Downtown", "Chinatown")
@@ -1055,7 +1162,7 @@ async function fetchStreet(lat, lon, query, signal) {
       const coords = elementCoordinates(el);
       if (coords.length < 3) continue;
       const tags = el.tags || {};
-      const nameWords = normalizedWords([tags.name, tags['name:en']].filter(Boolean).join(' '));
+      const nameWords = normalizedWords([tags.name, tags['name:en'], tags['name:ru']].filter(Boolean).join(' '));
       const overlap = wordOverlap(queryWords, nameWords);
       if (!overlap) continue;
       if (approximateAreaM2(coords) > 2_000_000) continue; // a street isn't a whole suburb
@@ -1076,7 +1183,7 @@ async function fetchStreet(lat, lon, query, signal) {
     const segments = [];
     for (const el of wayEls) {
       const tags = el.tags || {};
-      const nameWords = normalizedWords([tags.name, tags['name:en']].filter(Boolean).join(' '));
+      const nameWords = normalizedWords([tags.name, tags['name:en'], tags['name:ru']].filter(Boolean).join(' '));
       if (!wordOverlap(queryWords, nameWords)) continue;
       const geom = (el.geometry || []).filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
       if (geom.length >= 2) segments.push(geom.map((p) => [p.lon, p.lat]));
@@ -1343,7 +1450,7 @@ async function fetchEnclosingArea(lat, lon, signal, query = '') {
     // user's words actually name. Smallest-area still dominates — containment + min-area is what
     // makes the Capitol land on "Capitol Square" even though the user said "grounds".
     const nameWords = normalizedWords([
-      el.tags?.name, el.tags?.['name:en'], el.tags?.official_name, el.tags?.alt_name,
+      el.tags?.name, el.tags?.['name:en'], el.tags?.['name:ru'], el.tags?.official_name, el.tags?.alt_name,
     ].filter(Boolean).join(' '));
     const nameMatch = wordOverlap(queryWords, nameWords) > 0;
     const better = areaM2 < bestArea * 0.999
@@ -1444,7 +1551,7 @@ async function fetchLocalMonument(lat, lon, query, signal) {
           // would silently disable the snap for the whole session, field test 7 §1)
           const feats = [];
           for (const el of elements) {
-            const name = el.tags?.name || el.tags?.['name:en'] || el.tags?.official_name || el.tags?.alt_name;
+            const name = el.tags?.name || el.tags?.['name:ru'] || el.tags?.['name:en'] || el.tags?.official_name || el.tags?.alt_name;
             if (!name) continue;
             const p = Number.isFinite(el.lat) ? { lat: el.lat, lon: el.lon }
               : (el.center ? { lat: el.center.lat, lon: el.center.lon } : null);
@@ -1505,7 +1612,7 @@ export function selectFootprint(elements, targetLat, targetLon, query, mode = 'l
     const areaM2 = approximateAreaM2(coords);
 
     const nameWords = normalizedWords([
-      tags.name, tags['name:en'], tags.official_name, tags.alt_name, tags.short_name,
+      tags.name, tags['name:en'], tags['name:ru'], tags.official_name, tags.alt_name, tags.short_name,
     ].filter(Boolean).join(' '));
     const nameOverlap = wordOverlap(queryWords, nameWords);
     // How completely the query covers this feature's name (1.0 ≈ exact match).
@@ -1760,7 +1867,8 @@ function normalizedWords(value) {
   return new Set(String(value || '')
     .toLowerCase()
     .normalize('NFKD')
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .split(/\s+/)
     .filter((word) => word.length > 2));

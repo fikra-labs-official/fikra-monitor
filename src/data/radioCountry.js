@@ -14,6 +14,9 @@ const ISO_ALPHA_2_SET = new Set(ISO_ALPHA_2_CODES);
 const ENGLISH_REGION_NAMES = typeof Intl?.DisplayNames === 'function'
   ? new Intl.DisplayNames(['en'], { type: 'region' })
   : null;
+const RUSSIAN_REGION_NAMES = typeof Intl?.DisplayNames === 'function'
+  ? new Intl.DisplayNames(['ru'], { type: 'region' })
+  : null;
 
 function countryKey(value) {
   return String(value || '')
@@ -28,8 +31,10 @@ function countryKey(value) {
 
 const COUNTRY_NAME_TO_CODE = new Map();
 for (const code of ISO_ALPHA_2_CODES) {
-  const displayName = ENGLISH_REGION_NAMES?.of(code);
-  if (displayName && displayName !== code) COUNTRY_NAME_TO_CODE.set(countryKey(displayName), code);
+  for (const names of [ENGLISH_REGION_NAMES, RUSSIAN_REGION_NAMES]) {
+    const displayName = names?.of(code);
+    if (displayName && displayName !== code) COUNTRY_NAME_TO_CODE.set(countryKey(displayName), code);
+  }
 }
 
 for (const [name, code] of Object.entries({
@@ -58,11 +63,11 @@ for (const [name, code] of Object.entries({
 })) COUNTRY_NAME_TO_CODE.set(countryKey(name), code);
 
 function canonicalCountryName(code) {
-  return ENGLISH_REGION_NAMES?.of(code) || code;
+  return RUSSIAN_REGION_NAMES?.of(code) || ENGLISH_REGION_NAMES?.of(code) || code;
 }
 
 /**
- * Normalize a bounded country code or English/common country name.
+ * Normalize a bounded country code or English/Russian/common country name.
  * Invalid or ambiguous values fail closed instead of broadening selection.
  */
 export function normalizeRadioCountryInput(value) {

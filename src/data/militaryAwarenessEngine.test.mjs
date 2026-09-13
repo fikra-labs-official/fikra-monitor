@@ -10,8 +10,8 @@ import {
 } from './militaryAwarenessEngine.js';
 
 test('awareness formatters preserve valid zeroes and replace missing or invalid values', () => {
-  assert.equal(formatAwarenessDistance(0), '0 m');
-  assert.equal(formatAwarenessDistance(950), '950 m');
+  assert.equal(formatAwarenessDistance(0), '0 м');
+  assert.equal(formatAwarenessDistance(950), '950 м');
   assert.equal(formatAwarenessDistance(Number.NaN), '—');
   assert.equal(formatAwarenessDistance(-1), '—');
   assert.equal(formatAwarenessLabel(' UAL649 '), 'UAL649');
@@ -43,8 +43,8 @@ test('awareness cohorts reject negative and non-finite distances as unavailable 
 
 test('unavailable and stale feeds remain unknown', () => {
   assert.equal(AWARENESS_RELATIONSHIP.OUTSIDE_RANGE, 'OUTSIDE_RANGE');
-  assert.equal(summarizeAwarenessCohort([], { available: false }).reason, 'feed unavailable');
-  assert.equal(summarizeAwarenessCohort([], { stale: true }).reason, 'feed stale');
+  assert.equal(summarizeAwarenessCohort([], { available: false }).reason, 'источник недоступен');
+  assert.equal(summarizeAwarenessCohort([], { stale: true }).reason, 'данные источника устарели');
 });
 
 test('navigation prioritizes nearby targets from the selected cohort', () => {
@@ -53,8 +53,8 @@ test('navigation prioritizes nearby targets from the selected cohort', () => {
     { id: 'military', summary: { nearest: [{ icao24: 'm1', distanceM: 500 }] } },
   ];
   const targets = getAwarenessNavigationTargets(cohorts, { layerId: 'flights', id: 'subject' }, ['flights:a1']);
-  // Cohort affinity still wins among UNVISITED targets: a2 leads at 2000 m even
-  // though military m1 sits at 500 m.
+  // Cohort affinity still wins among UNVISITED targets: a2 leads at 2000 м even
+  // though military m1 sits at 500 м.
   //
   // Visited state now outranks that affinity, which is the corrected half of
   // this ordering. Ranking the subject's own layer first unconditionally put

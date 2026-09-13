@@ -92,10 +92,10 @@ test('station marker categories share the dropdown palette with stable overlap p
 });
 
 test('cluster badges lead with a readable count and concise dominant category', () => {
-  assert.equal(radioClusterBadgeText('news', 12), '12 NEWS');
-  assert.equal(radioClusterBadgeText('public-safety', 7.9), '7 SAFETY');
-  assert.equal(radioClusterBadgeText('genre:jazz', 4), '4 MUSIC');
-  assert.equal(radioClusterBadgeText('unknown', -2), '0 OTHER');
+  assert.equal(radioClusterBadgeText('news', 12), '12 НОВОСТИ');
+  assert.equal(radioClusterBadgeText('public-safety', 7.9), '7 БЕЗОПАСНОСТЬ');
+  assert.equal(radioClusterBadgeText('genre:jazz', 4), '4 МУЗЫКА');
+  assert.equal(radioClusterBadgeText('unknown', -2), '0 ДРУГОЕ');
 });
 
 test('Radio globe labels are compact and frequency-first without misreading names', () => {
@@ -148,18 +148,18 @@ test('Radio preserves one-to-one cluster identity across substantial membership 
   ];
   const generated = [];
   const reconciled = reconcileRadioClusterCandidates([
-    { id: 'b:e:4', stationIds: ['a', 'b', 'c', 'e'], text: '4 NEWS' },
-    { id: 'new:weak:3', stationIds: ['d', 'm', 'n'], text: '3 OTHER' },
-    { id: 'x:q:4', stationIds: ['w', 'x', 'y', 'q'], text: '4 MUSIC' },
+    { id: 'b:e:4', stationIds: ['a', 'b', 'c', 'e'], text: '4 НОВОСТИ' },
+    { id: 'new:weak:3', stationIds: ['d', 'm', 'n'], text: '3 ДРУГОЕ' },
+    { id: 'x:q:4', stationIds: ['w', 'x', 'y', 'q'], text: '4 МУЗЫКА' },
   ], previous, (candidate) => {
     const id = `new:${candidate.id}`;
     generated.push(id);
     return id;
   });
   assert.equal(reconciled[0].id, 'stable:north');
-  assert.equal(reconciled[0].text, '4 NEWS');
+  assert.equal(reconciled[0].text, '4 НОВОСТИ');
   assert.equal(reconciled[2].id, 'stable:south');
-  assert.equal(reconciled[2].text, '4 MUSIC');
+  assert.equal(reconciled[2].text, '4 МУЗЫКА');
   assert.equal(reconciled[1].id, 'new:new:weak:3');
   assert.deepEqual(generated, ['new:new:weak:3']);
   assert.deepEqual(previous[0].stationIds, ['a', 'b', 'c', 'd']);
@@ -1277,7 +1277,7 @@ test('accepted snapshots allowlist station fields and never regress generation i
     assert.equal(getRadioUIState().stationCount, 1);
     assert.equal(getRadioUIState().stale, true);
     assert.equal(getRadioUIState().degraded, true);
-    assert.match(getRadioUIState().error, /refresh failed/i);
+    assert.match(getRadioUIState().error, /Не удалось обновить каталог/i);
 
     // Producer restart: a NEW instance token restarts the generation sequence.
     // Generation 1 from instance B is a fresh catalog, not a repeat of the old
@@ -1498,7 +1498,7 @@ test('Radio text uses protected selected and bounded ambient WorldOverlay entrie
   const cluster = createRadioClusterOverlayEntry({
     id: 'a:z:12',
     position,
-    text: '12 NEWS',
+    text: '12 НОВОСТИ',
     accent: '#44adff',
     stationCount: 12,
   });
@@ -1508,7 +1508,7 @@ test('Radio text uses protected selected and bounded ambient WorldOverlay entrie
   assert.equal(cluster.horizonCull, true);
   assert.equal(cluster.maxDistance, RADIO_GLOBE_INTERACTION_MAX_DISTANCE_M);
   assert.equal(cluster.distanceScale.far, RADIO_GLOBE_INTERACTION_MAX_DISTANCE_M);
-  assert.equal(cluster.title, '12 NEWS');
+  assert.equal(cluster.title, '12 НОВОСТИ');
   assert.equal(cluster.priority, 12);
   assert.equal(cluster.stateless, true);
   assert.equal(cluster.edgeFade, 'none');

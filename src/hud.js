@@ -19,6 +19,7 @@ import { CITY_POIS } from './locations.js';
 import { composeLocalityTag } from './hudLocality.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
+import { t } from './i18n/index.js';
 import { isHudSummaryUnconfigured } from './hudSummaryResponse.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
@@ -47,8 +48,8 @@ const HUD_GEOID_CELL_DEG = 0.01;
 /** Flattened list of all city POIs for nearest-point lookups. */
 const NEARBY_POINTS = Object.values(CITY_POIS)
   .flatMap((city) => city.pois.map((poi) => ({
-    city: city.name,
-    poi: poi.name,
+    city: city.label || city.name,
+    poi: poi.label || poi.name,
     lat: poi.lat,
     lon: poi.lon,
   })));
@@ -146,28 +147,28 @@ export class IntelHUD {
 
     this._el.innerHTML = `
       <div class="hud-top-bar">
-        <span class="hud-top-bar-left">TOP SECRET // SI-TK // NOFORN</span>
+        <span class="hud-top-bar-left">${t('hud.classification')}</span>
         <span class="hud-top-bar-center">${this._missionId}</span>
-        <span class="hud-top-bar-right">PAGE 1/1</span>
+        <span class="hud-top-bar-right">${t('hud.page')}</span>
       </div>
 
       <div class="hud-corner hud-top-left">
         <div class="hud-bracket">┌</div>
         <div class="hud-content">
-          <div class="hud-classification">TOP SECRET // SI-TK // NOFORN</div>
+          <div class="hud-classification">${t('hud.classification')}</div>
           <div class="hud-system">${this._missionId}  ${this._sensorId}</div>
-          <div class="hud-mode" id="hud-mode">NORMAL</div>
+          <div class="hud-mode" id="hud-mode">${t('hud.mode.normal')}</div>
           <div class="hud-summary-wrap">
-            <div class="hud-summary-label">SUMMARY</div>
-            <div class="hud-summary" id="hud-summary">Awaiting telemetry...</div>
+            <div class="hud-summary-label">${t('hud.summary')}</div>
+            <div class="hud-summary" id="hud-summary">${t('hud.awaitingTelemetry')}</div>
           </div>
         </div>
       </div>
 
       <div class="hud-corner hud-top-right">
         <div class="hud-content" style="text-align:right">
-          <div class="hud-rec"><span id="hud-rec-dot">●</span> REC  <span id="hud-timestamp">2026-01-01 00:00:00Z</span></div>
-          <div class="hud-orbital">ORB: ${this._orbitNum}  PASS: DESC-${this._passNum}</div>
+          <div class="hud-rec"><span id="hud-rec-dot">●</span> ${t('hud.recording')}  <span id="hud-timestamp">2026-01-01 00:00:00Z</span></div>
+          <div class="hud-orbital">${t('hud.orbit')}: ${this._orbitNum}  ${t('hud.pass')}: НИСХ-${this._passNum}</div>
         </div>
         <div class="hud-bracket">┐</div>
       </div>
@@ -182,26 +183,26 @@ export class IntelHUD {
 
       <div class="hud-corner hud-bottom-right">
         <div class="hud-content" style="text-align:right">
-          <div id="hud-gsd">GSD: --m  NIIRS: --</div>
-          <div id="hud-alt">ALT: --m   SUN: --° EL</div>
+          <div id="hud-gsd">GSD: --м  NIIRS: --</div>
+          <div id="hud-alt">${t('hud.altitude')}: --м   ${t('hud.sun')}: --° ${t('hud.elevation')}</div>
           <div id="hud-ais-vessel" class="hud-ais-vessel">AIS: --</div>
         </div>
         <div class="hud-bracket">┘</div>
       </div>
 
       <div class="hud-edge hud-left-edge">
-        <div id="hud-coll">COLL: --:--:--Z</div>
-        <div id="hud-ona">ONA: --°</div>
+        <div id="hud-coll">${t('hud.collection')}: --:--:--Z</div>
+        <div id="hud-ona">${t('hud.angle')}: --°</div>
       </div>
 
       <div class="hud-edge hud-right-edge">
-        <div>BAND: PAN</div>
-        <div>BITS: 11</div>
-        <div>LVL: 1A</div>
+        <div>${t('hud.band')}: PAN</div>
+        <div>${t('hud.bits')}: 11</div>
+        <div>${t('hud.level')}: 1A</div>
       </div>
 
       <div class="hud-bottom-bar">
-        <span id="hud-bottom-line">LAT: --  LON: --  MGRS: ---</span>
+        <span id="hud-bottom-line">${t('hud.latitude')}: --  ${t('hud.longitude')}: --  MGRS: ---</span>
       </div>
     `;
     this._el.dataset.variant = this._variant;
@@ -318,7 +319,7 @@ export class IntelHUD {
     if (llEl) llEl.textContent = `${latDMS} ${lonDMS}`;
     const bottomEl = document.getElementById('hud-bottom-line');
     if (bottomEl) {
-      bottomEl.textContent = `MGRS: ${mgrsLabel}  LAT: ${latDMS}  LON: ${lonDMS}`;
+      bottomEl.textContent = `MGRS: ${mgrsLabel}  ${t('hud.latitude')}: ${latDMS}  ${t('hud.longitude')}: ${lonDMS}`;
     }
 
     // GSD (Ground Sample Distance): approximate resolution in meters per pixel
@@ -329,7 +330,7 @@ export class IntelHUD {
     const gsdInches = gsd * 39.37;
     const niirs = Math.max(0, Math.min(9, 10.25 - 3.32 * Math.log10(gsdInches)));
     const gsdEl = document.getElementById('hud-gsd');
-    if (gsdEl) gsdEl.textContent = `GSD: ${gsd.toFixed(2)}m  NIIRS: ${niirs.toFixed(1)}`;
+    if (gsdEl) gsdEl.textContent = `GSD: ${gsd.toFixed(2)}м  NIIRS: ${niirs.toFixed(1)}`;
 
     // Altitude — reported as height above MEAN SEA LEVEL. `altM` is the raw
     // ellipsoidal camera height, which reads far below zero wherever the geoid
@@ -340,7 +341,7 @@ export class IntelHUD {
     const geoidN = this._geoidUndulationM(latDeg, lonDeg);
     const altMslM = ellipsoidalToMslDisplayM(altM, geoidN);
     const sunEl = this._estimateSunElevation(latDeg, lonDeg);
-    if (altEl) altEl.textContent = `ALT: ${Math.round(altMslM)}m   SUN: ${sunEl.toFixed(1)}° EL`;
+    if (altEl) altEl.textContent = `${t('hud.altitude')}: ${Math.round(altMslM)}м   ${t('hud.sun')}: ${sunEl.toFixed(1)}° ${t('hud.elevation')}`;
 
     // Collection timestamp
     const collEl = document.getElementById('hud-coll');
@@ -349,7 +350,7 @@ export class IntelHUD {
       const h = String(now.getUTCHours()).padStart(2, '0');
       const m = String(now.getUTCMinutes()).padStart(2, '0');
       const s = String(now.getUTCSeconds()).padStart(2, '0');
-      collEl.textContent = `COLL: ${h}:${m}:${s}Z`;
+      collEl.textContent = `${t('hud.collection')}: ${h}:${m}:${s}Z`;
     }
 
     // Off-nadir angle (ONA): camera pitch of -90 deg is nadir (straight down),
@@ -357,7 +358,7 @@ export class IntelHUD {
     const pitchDeg = Cesium.Math.toDegrees(camera.pitch);
     const ona = Math.max(0, 90 + pitchDeg);
     const onaEl = document.getElementById('hud-ona');
-    if (onaEl) onaEl.textContent = `ONA: ${ona.toFixed(1)}°`;
+    if (onaEl) onaEl.textContent = `${t('hud.angle')}: ${ona.toFixed(1)}°`;
 
     // `altM` stays the raw ellipsoidal camera height the sensor model reads
     // (GSD/NIIRS, view band). `altMslM` is the ADDITIVE display datum — the
@@ -428,8 +429,8 @@ export class IntelHUD {
     const sec = ((minFloat - min) * 60).toFixed(2);
 
     let dir;
-    if (type === 'lat') dir = decimal >= 0 ? 'N' : 'S';
-    else dir = decimal >= 0 ? 'E' : 'W';
+    if (type === 'lat') dir = decimal >= 0 ? 'С' : 'Ю';
+    else dir = decimal >= 0 ? 'В' : 'З';
 
     const degStr = type === 'lon' ? String(deg).padStart(3, '0') : String(deg).padStart(2, '0');
     return `${degStr}°${String(min).padStart(2, '0')}'${String(sec).padStart(5, '0')}"${dir}`;
@@ -564,13 +565,25 @@ export class IntelHUD {
    */
   _composeSummary() {
     const m = this._latestMetrics;
-    if (!m) return 'Awaiting telemetry...';
+    if (!m) return t('hud.awaitingTelemetry');
 
     const modeEl = document.getElementById('hud-mode');
-    const modeLabel = modeEl?.textContent || 'NORMAL';
+    const modeLabel = modeEl?.dataset?.mode || 'normal';
     const region = this._regionLabel(m.latDeg, m.lonDeg);
     const nearest = this._nearestKnownPoint(m.latDeg, m.lonDeg);
     const band = this._viewBand(m.altM);
+    const modeRu = t(`hud.mode.${modeLabel}`, {}, modeEl?.textContent || modeLabel.toUpperCase());
+    const bandRu = {
+      STREET: t('hud.band.street'), CITY: t('hud.band.city'), METRO: t('hud.band.metro'),
+      REGIONAL: t('hud.band.regional'), GLOBAL: t('hud.band.global'),
+    }[band] || band;
+    const regionRu = {
+      ARCTIC: t('hud.region.arctic'), ANTARCTIC: t('hud.region.antarctic'),
+      'NORTH AMERICA': t('hud.region.northAmerica'), 'SOUTH AMERICA': t('hud.region.southAmerica'),
+      EUROPE: t('hud.region.europe'), AFRICA: t('hud.region.africa'), ASIA: t('hud.region.asia'), OCEANIA: t('hud.region.oceania'),
+      'NORTHERN OCEANIC GRID': t('hud.region.northernOcean'),
+      'SOUTHERN OCEANIC GRID': t('hud.region.southernOcean'),
+    }[region] || region;
     const window = this._viewWindowKm(m.latDeg);
     // Rough local timezone from longitude (15 deg per hour)
     const utcOffset = Math.round(m.lonDeg / 15);
@@ -580,15 +593,17 @@ export class IntelHUD {
     // keeps the ellipsoidal height: its thresholds were tuned against it.
     const altDisplayM = Number.isFinite(m.altMslM) ? m.altMslM : m.altM;
     const altTag = altDisplayM >= 1000
-      ? `${(altDisplayM / 1000).toFixed(1)}KM`
-      : `${Math.round(altDisplayM)}M`;
+      ? `${(altDisplayM / 1000).toFixed(1)}КМ`
+      : `${Math.round(altDisplayM)}М`;
     const winTag = window
-      ? `${Math.max(1, Math.round(window.widthKm))}x${Math.max(1, Math.round(window.heightKm))}KM`
-      : 'N/A';
+      ? `${Math.max(1, Math.round(window.widthKm))}x${Math.max(1, Math.round(window.heightKm))}КМ`
+      : t('hud.notAvailable');
     // NEAR the nearest catalogued POI at metro range; otherwise the lat/lon sector.
-    const localityTag = composeLocalityTag(nearest, m.latDeg, m.lonDeg);
+    const localityTag = composeLocalityTag(nearest, m.latDeg, m.lonDeg)
+      .replace(/^NEAR /, `${t('hud.near')} `)
+      .replace(/^SECTOR /, `${t('hud.sector')} `);
 
-    return `${modeLabel} ${band} ${localityTag} | ${region} | ALT ${altTag} | WINDOW ${winTag} | SUN ${m.sunEl.toFixed(0)}° | ONA ${m.ona.toFixed(0)}° | ${localTag}`;
+    return `${modeRu} ${bandRu} ${localityTag} | ${regionRu} | ${t('hud.altitude')} ${altTag} | ${t('hud.view')} ${winTag} | ${t('hud.sun')} ${m.sunEl.toFixed(0)}° | ${t('hud.angle')} ${m.ona.toFixed(0)}° | ${localTag}`;
   }
 
   /**
@@ -732,8 +747,8 @@ export class IntelHUD {
     // Update mode label
     const modeEl = document.getElementById('hud-mode');
     if (modeEl) {
-      const modeNames = { surveillance: 'NVG', thermal: 'FLIR', retro: 'CRT' };
-      modeEl.textContent = modeNames[styleName] || styleName.toUpperCase();
+      modeEl.dataset.mode = styleName;
+      modeEl.textContent = t(`hud.mode.${styleName}`, {}, styleName.toUpperCase());
     }
     // Update color scheme
     const colors = HUD_COLORS[styleName] || HUD_COLORS._default;

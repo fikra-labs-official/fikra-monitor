@@ -1,3 +1,5 @@
+import { t } from './i18n/index.js';
+
 /** Normalize a heading into the [0, 360) range. */
 export function normalizeHeading(value) {
   if (!Number.isFinite(value)) return 0;
@@ -76,9 +78,15 @@ export function formatCockpitContextScope(subjectLabel, radiusM, installationCov
   const coverage = typeof installationCoverage === 'string'
     ? installationCoverage.trim()
     : '';
-  const base = `${normalizedLabel} · ${radiusKm} KM AIR/SEA WINDOW`;
+  const localizedCoverage = coverage === 'CURRENT VIEWPORT ONLY'
+    ? t('cockpit.coverage.currentViewport')
+    : coverage;
+  const base = t('cockpit.contextScope', {
+    label: normalizedLabel,
+    radius: radiusKm,
+  });
   return coverage
-    ? `${base} · INSTALLATIONS ${coverage}`
+    ? `${base} · ${t('cockpit.installationsCoverage', { coverage: localizedCoverage })}`
     : base;
 }
 
@@ -92,8 +100,10 @@ export function compassDivisions(heading) {
 export function formatCompassDivision(heading) {
   const normalized = normalizeHeading(heading);
   const labels = new Map([
-    [0, 'N'], [45, 'NE'], [90, 'E'], [135, 'SE'],
-    [180, 'S'], [225, 'SW'], [270, 'W'], [315, 'NW'],
+    [0, t('cockpit.compass.n')], [45, t('cockpit.compass.ne')],
+    [90, t('cockpit.compass.e')], [135, t('cockpit.compass.se')],
+    [180, t('cockpit.compass.s')], [225, t('cockpit.compass.sw')],
+    [270, t('cockpit.compass.w')], [315, t('cockpit.compass.nw')],
   ]);
   return labels.get(normalized) || String(Math.round(normalized)).padStart(3, '0');
 }

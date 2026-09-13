@@ -476,7 +476,7 @@ test('a still-saturated exact viewport is reported honestly instead of implied c
   const harness = await runInstallationLoad({ elements, saturated: true, exactSaturated: true });
   try {
     assert.equal(harness.stats().saturated, true);
-    assert.match(harness.stats().error, /Too many mapped sites/);
+    assert.match(harness.stats().error, /слишком много объектов/);
   } finally {
     harness.restore();
   }
@@ -621,7 +621,7 @@ test('reports bounded installation requests as loading and clears on settlement'
     assert.equal(militaryInstallationsLayer.getStats().loading, true);
     assert.equal(
       militaryInstallationsLayer.getStats().loadingLabel,
-      'loading mapped installation context',
+      'загрузка объектов на карте',
     );
     resolveInstallations({
       ok: true,

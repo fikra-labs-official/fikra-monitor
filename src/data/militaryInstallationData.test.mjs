@@ -40,7 +40,7 @@ test('an unnamed feature reads as its class, never as a raw OSM id', () => {
 
   assert.deepEqual(
     result.records.map((record) => record.name),
-    ['Firing range', 'Military airfield', 'Naval base', 'Military land', 'Firing range'],
+    ['Полигон', 'Военный аэродром', 'Военно-морская база', 'Военная территория', 'Полигон'],
   );
   for (const record of result.records) {
     assert.doesNotMatch(record.name, /\d/, `label must carry no OSM id: ${record.name}`);
@@ -62,11 +62,11 @@ test('a real OSM name always wins over the class label', () => {
 });
 
 test('an unmapped class title-cases instead of leaking an underscored tag', () => {
-  assert.equal(humanizeInstallationClass('danger_area'), 'Danger area');
-  assert.equal(humanizeInstallationClass('checkpoint'), 'Checkpoint');
-  assert.equal(humanizeInstallationClass('training_area_north'), 'Training area north');
-  assert.equal(humanizeInstallationClass(''), 'Mapped installation');
-  assert.equal(humanizeInstallationClass(null), 'Mapped installation');
+  assert.equal(humanizeInstallationClass('danger_area'), 'Объект на карте');
+  assert.equal(humanizeInstallationClass('checkpoint'), 'Объект на карте');
+  assert.equal(humanizeInstallationClass('training_area_north'), 'Объект на карте');
+  assert.equal(humanizeInstallationClass(''), 'Объект на карте');
+  assert.equal(humanizeInstallationClass(null), 'Объект на карте');
 });
 
 test('accepts only small non-dateline request bboxes', () => {

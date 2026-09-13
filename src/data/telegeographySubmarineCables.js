@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { t } from '../i18n/index.js';
 import {
   clearOverlaySource,
   setOverlayEntries,
@@ -540,7 +541,7 @@ export function createTeleGeographySubmarineCableLayer({
 
     _loading = true;
     _error = null;
-    _loadingLabel = 'loading...';
+    _loadingLabel = t('data.common.loading');
     // Ownership token (the militaryAwareness activationId pattern): a
     // disable/abort followed by a fresh enable starts a NEWER load while this
     // one is still settling. The stale load must bail after every await and
@@ -1039,7 +1040,7 @@ export function createTeleGeographySubmarineCableLayer({
 
   return {
     id: 'telegeography-submarine-cables',
-    name: 'Submarine Cables',
+    name: t('data.layer.submarineCables'),
     icon: '≋',
     source: 'TeleGeography',
     updateInterval: 0,

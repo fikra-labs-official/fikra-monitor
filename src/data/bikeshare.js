@@ -11,6 +11,7 @@
  */
 
 import * as Cesium from 'cesium';
+import { pluralRu, t } from '../i18n/index.js';
 import { governorRequestRender } from '../renderGovernor.js';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
@@ -961,21 +962,21 @@ function statusToColor(status, capacity) {
  */
 function buildSelectionLabel(record) {
   const stationName = String(record?.stationName || '').trim();
-  const stationLabel = stationName || (record?.stationId ? `Station ${record.stationId}` : 'Station');
+  const stationLabel = stationName || (record?.stationId ? `Станция ${record.stationId}` : 'Станция');
   const bikes = Number.isFinite(record?.bikesAvailable) ? record.bikesAvailable : '?';
   const docks = Number.isFinite(record?.docksAvailable) ? record.docksAvailable : '?';
   const capacity = Number.isFinite(record?.capacity) ? record.capacity : '?';
 
   const lines = [
     stationLabel,
-    `🚲 ${bikes} avail · ${docks} docks · ${capacity} cap`,
+    `🚲 ${bikes} вел. · ${docks} ${pluralRu(docks, ['место', 'места', 'мест'])} из ${capacity}`,
   ];
 
   // Append warnings for stations that are offline or partially non-operational
   const abnormal = [];
-  if (record?.isInstalled === false) abnormal.push('⚠️ Not installed');
-  if (record?.isRenting === false) abnormal.push('⚠️ Not renting');
-  if (record?.isReturning === false) abnormal.push('⚠️ Not returning');
+  if (record?.isInstalled === false) abnormal.push('⚠️ Не установлена');
+  if (record?.isRenting === false) abnormal.push('⚠️ Выдача недоступна');
+  if (record?.isReturning === false) abnormal.push('⚠️ Возврат недоступен');
   if (abnormal.length > 0) {
     lines.push(abnormal.join(' · '));
   }
@@ -1277,7 +1278,7 @@ function buildDetectionId(record) {
   const capacity = Number.isFinite(record.capacity) ? record.capacity : '?';
   // Render record stores the station name under `stationName` (see the render-map
   // shape), so `record.name` was always undefined → every label read "Dock N".
-  const label = record.stationName || `Dock ${record.stationId}`;
+  const label = record.stationName || `Станция ${record.stationId}`;
   // Truncate long station names to keep HUD readable
   const short = label.length > 24 ? label.slice(0, 22) + '…' : label;
   return `🚲 ${short} [${bikes}/${capacity}]`;
@@ -1377,7 +1378,7 @@ async function activateCity(cityId, generation) {
   } catch (error) {
     if (error?.name === 'AbortError') return;
     console.warn(`[Data:Bikeshare] ${cityId} activate error:`, error);
-    _error = 'GBFS fetch error';
+    _error = 'ошибка загрузки GBFS';
     deactivateCity(cityId);
     _activeCityIds.delete(cityId);
   } finally {
@@ -1451,7 +1452,7 @@ function onCameraChanged() {
  */
 const bikeshareLayer = {
   id: 'bikeshare',
-  name: 'Bikeshare',
+  name: t('data.layer.bikeshare'),
   icon: '🚲',
   source: 'GBFS',
   updateInterval: STATUS_POLL_MS,
@@ -1581,7 +1582,7 @@ const bikeshareLayer = {
       } catch (error) {
         if (error?.name === 'AbortError') return;
         console.warn(`[Data:Bikeshare] ${cityId} status update error:`, error);
-        _error = 'GBFS status update failed';
+        _error = 'не удалось обновить статус GBFS';
       }
     }));
 
@@ -1610,8 +1611,8 @@ const bikeshareLayer = {
     };
     if (_loading) {
       stats.loadingLabel = _activeCityIds.size > 0
-        ? `syncing ${_activeCityIds.size} city feeds...`
-        : 'scanning nearby systems...';
+        ? `синхронизация городских потоков: ${_activeCityIds.size}...`
+        : 'поиск ближайших систем...';
     }
     if (_error) stats.error = _error;
     return stats;

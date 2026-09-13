@@ -1,18 +1,18 @@
 {
-  "name": "gods-eye-view",
+  "name": "fikra-monitor",
   "private": true,
   "version": "0.1.1",
-  "description": "A real-time intelligence console for planet Earth — photorealistic 3D globe, live aircraft/ships/satellites/earthquakes/CCTV, and hands-free voice control. Runs in a browser.",
+  "description": "Fikra Monitor by Fikra Labs: a Russian-localized open-data globe based on God's Eye View.",
   "type": "module",
   "license": "MIT",
   "author": "Bilawal Sidhu",
-  "homepage": "https://github.com/bilawalsidhu/gods-eye-view#readme",
+  "homepage": "https://github.com/fikra-labs-official/fikra-monitor#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bilawalsidhu/gods-eye-view.git"
+    "url": "https://github.com/fikra-labs-official/fikra-monitor.git"
   },
   "bugs": {
-    "url": "https://github.com/bilawalsidhu/gods-eye-view/issues"
+    "url": "https://github.com/fikra-labs-official/fikra-monitor/issues"
   },
   "engines": {
     "node": ">=24.14.0 <25 || >=26 <27"
@@ -33,6 +33,7 @@
   ],
   "scripts": {
     "doctor": "node scripts/setup-doctor.mjs",
+    "check:publication": "node scripts/check-publication.mjs",
     "dev": "vite",
     "dev:secure": "./scripts/dev-secure.sh",
     "opensky:import": "./scripts/opensky-import-client.sh",
@@ -51,8 +52,8 @@
     "satellite.js": "^6.0.2"
   },
   "devDependencies": {
-    "puppeteer": "^24.37.5",
-    "sharp": "^0.34.5",
+    "puppeteer": "^25.10.0",
+    "sharp": "^0.35.4",
     "vite": "^6.0.0",
     "vite-plugin-cesium": "^1.2.23",
     "ws": "^8.21.0"

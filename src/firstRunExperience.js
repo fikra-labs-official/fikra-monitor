@@ -1,3 +1,5 @@
+import { t } from './i18n/index.js';
+
 // First-run mission launcher.
 //
 // The map deliberately does not auto-enable live feeds on every visit: doing so
@@ -33,9 +35,9 @@ export const FIRST_RUN_SESSION_KEY = 'gev:first-run-mission-session:v1';
 export const ENVIRONMENTAL_LABEL_CHOICE = 'ENVIRONMENTAL';
 
 const ENVIRONMENTAL_LABELS = Object.freeze({
-  ENVIRONMENTAL: Object.freeze({ title: 'ENVIRONMENTAL' }),
-  EARTH_WATCH: Object.freeze({ title: 'EARTH WATCH' }),
-  ACTIVE_EVENTS: Object.freeze({ title: 'ACTIVE EVENTS' }),
+  ENVIRONMENTAL: Object.freeze({ title: t('firstRun.environmental') }),
+  EARTH_WATCH: Object.freeze({ title: t('firstRun.earthWatch') }),
+  ACTIVE_EVENTS: Object.freeze({ title: t('firstRun.activeEvents') }),
 });
 
 /**
@@ -90,12 +92,12 @@ export const FIRST_RUN_MISSIONS = Object.freeze({
   contacts: Object.freeze({
     kind: 'context',
     contextMode: 'contacts',
-    busyText: 'Starting live contacts…',
+    busyText: t('firstRun.startingContacts'),
   }),
   'space-missions': Object.freeze({
     kind: 'context',
     contextMode: 'space-missions',
-    busyText: 'Opening space missions…',
+    busyText: t('firstRun.openingSpaceMissions'),
   }),
   environmental: Object.freeze({
     kind: 'globe',
@@ -113,7 +115,7 @@ export const FIRST_RUN_MISSIONS = Object.freeze({
     // before a launch. LEDGERED post-launch. Until it lands, keyless visitors
     // are judged on the layer row, which tells them the truth.
     layerIds: Object.freeze(['earthquakes', 'local-firms']),
-    busyText: 'Scanning active events…',
+    busyText: t('firstRun.scanningActiveEvents'),
   }),
   explore: Object.freeze({ kind: 'none' }),
 });
@@ -427,7 +429,7 @@ export function initFirstRunExperience({
     // <body> mid-flight and strands a keyboard visitor outside the launcher.
     for (const button of buttons) button.setAttribute('aria-disabled', String(next));
     if (!status) return;
-    if (next) status.textContent = FIRST_RUN_MISSIONS[choice]?.busyText || 'Working…';
+    if (next) status.textContent = FIRST_RUN_MISSIONS[choice]?.busyText || t('firstRun.working');
     else if (status.dataset.sticky !== 'true') status.textContent = defaultStatus;
   };
 
@@ -472,7 +474,7 @@ export function initFirstRunExperience({
     const detail = Array.isArray(failed) && failed.length ? ` (${failed.join(', ')})` : '';
     if (status) {
       status.dataset.sticky = 'true';
-      status.textContent = `Could not open that mission${detail}. Retry or explore manually.`;
+      status.textContent = t('firstRun.missionFailed', { detail });
     }
     setBusy(false);
   };
@@ -488,7 +490,7 @@ export function initFirstRunExperience({
     if (box) box.checked = !wanted;
     if (!status) return;
     status.dataset.sticky = 'true';
-    status.textContent = 'This browser is blocking storage, so that could not be saved.';
+    status.textContent = t('firstRun.storageBlocked');
   };
 
   function onKeyDown(event) {

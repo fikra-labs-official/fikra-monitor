@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import {
+  googlePlacesPageSize,
+  googlePlacesSearchCenter,
+  normalizeNominatimBoundary,
+} from '../vite.config.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const ui = readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
@@ -21,15 +26,16 @@ function realtimeTools() {
   return new Function(`return ${literal};`)();
 }
 
-test('Realtime schema exposes the authoritative 28-tool inventory', () => {
+test('Realtime schema exposes the authoritative 29-tool inventory', () => {
   const tools = realtimeTools();
-  assert.equal(tools.length, 28);
+  assert.equal(tools.length, 29);
   const names = tools.map((tool) => tool.name);
-  assert.equal(new Set(names).size, 28, 'tool names are unique');
+  assert.equal(new Set(names).size, 29, 'tool names are unique');
   assert.ok(names.includes('set_context_mode'));
   assert.ok(names.includes('control_cockpit'));
   assert.ok(names.includes('select_nearest_aircraft'));
   assert.ok(names.includes('control_radio'));
+  assert.ok(names.includes('search_places'));
   // Every tool closes its parameter object: an open schema lets the model
   // invent arguments the runner silently drops.
   for (const tool of tools) {
@@ -62,6 +68,129 @@ test('the counting contract is stated in the Realtime instructions', () => {
   assert.match(text, /never a bare number/, 'rule 3 is stated as a prohibition too');
   assert.match(text, /VERBATIM/, 'rule 4: no estimating');
   assert.match(text, /flights layer loads where you look/, 'rule 5: the loaded-data caveat');
+});
+
+test('Realtime voice stays Russian unless another language is explicitly requested', () => {
+  const start = voice.indexOf("'Understand commands in Russian and English.");
+  assert.ok(start >= 0, 'the bilingual voice policy is missing');
+  const text = voice.slice(start, voice.indexOf('\n', start));
+  assert.match(text, /Always reply in Russian unless the user explicitly asks for another language/);
+  assert.match(text, /Keep tool names, argument keys, enum values, layer IDs, panel IDs/);
+  assert.match(text, /translate only the spoken reply/);
+});
+
+test('business, category, district, and admin-region requests use one atomic map action', () => {
+  const businessStart = voice.indexOf("'NAMED BUSINESS SEARCH:");
+  assert.ok(businessStart >= 0, 'the named-business routing rule is missing');
+  const business = voice.slice(businessStart, voice.indexOf('\n', businessStart));
+  assert.match(business, /company, office, cafe, restaurant, shop, hotel, clinic/);
+  assert.match(business, /call annotate_map ONCE/);
+  assert.match(business, /type=pin/);
+  assert.match(business, /flyTo=true/);
+  assert.match(business, /Do NOT call fly_to_location first/);
+
+  const categoryStart = voice.indexOf("'CATEGORY PLACE SEARCH:");
+  assert.ok(categoryStart >= 0, 'the category-place routing rule is missing');
+  const category = voice.slice(categoryStart, voice.indexOf('\n', categoryStart));
+  assert.match(category, /call search_places ONCE/);
+  assert.match(category, /maxResults=20/);
+  assert.match(category, /ranked catalogue, not a guaranteed complete registry/);
+  assert.match(category, /never claim that every real-world place was found/);
+
+  const boundaryStart = voice.indexOf("'DISTRICT BOUNDARY:");
+  assert.ok(boundaryStart >= 0, 'the district-boundary routing rule is missing');
+  const boundary = voice.slice(boundaryStart, voice.indexOf('\n', boundaryStart));
+  assert.match(boundary, /call annotate_map ONCE/);
+  assert.match(boundary, /type=area/);
+  assert.match(boundary, /footprint=true/);
+  assert.match(boundary, /entityKind=district/);
+  assert.match(boundary, /flyTo=true/);
+  assert.match(boundary, /Do NOT use type=route/);
+
+  const adminStart = voice.indexOf("'ADMINISTRATIVE BOUNDARY:");
+  assert.ok(adminStart >= 0, 'the admin-region routing rule is missing');
+  const admin = voice.slice(adminStart, voice.indexOf('\n', adminStart));
+  assert.match(admin, /state, province, oblast, governorate, emirate/);
+  assert.match(admin, /call annotate_map ONCE/);
+  assert.match(admin, /entityKind=admin_region/);
+  assert.match(admin, /do NOT approximate it with a hand-drawn shape/);
+});
+
+test('search_places tool is capped to one Google Places page', () => {
+  const tool = realtimeTools().find((candidate) => candidate.name === 'search_places');
+  assert.ok(tool);
+  assert.deepEqual(tool.parameters.required, ['query']);
+  assert.equal(tool.parameters.properties.maxResults.maximum, 20);
+  assert.equal(tool.parameters.properties.maxResults.minimum, 1);
+  assert.match(tool.description, /capped at 20/);
+  assert.match(realtime, /result\?\.action === 'search_places'/);
+  assert.match(realtime, /Найдено и отмечено \$\{count\} доступных мест/);
+  assert.match(realtime, /not a complete registry of every real-world place/);
+});
+
+test('global Places search accepts no center and validates an optional bias center', () => {
+  assert.equal(googlePlacesSearchCenter(new URLSearchParams({ q: 'Emaar, Dubai' })), undefined);
+  assert.deepEqual(
+    googlePlacesSearchCenter(new URLSearchParams({ lat: '0', lon: '0' })),
+    { latitude: 0, longitude: 0 },
+  );
+  for (const params of [
+    { lat: '25' },
+    { lon: '55' },
+    { lat: '', lon: '' },
+    { lat: '91', lon: '55' },
+    { lat: '25', lon: '181' },
+    { lat: 'not-a-number', lon: '55' },
+  ]) {
+    assert.equal(googlePlacesSearchCenter(new URLSearchParams(params)), null);
+  }
+});
+
+test('Google text-search page size defaults to five and clamps explicit bulk searches to twenty', () => {
+  assert.equal(googlePlacesPageSize(new URLSearchParams()), 5);
+  assert.equal(googlePlacesPageSize(new URLSearchParams({ limit: '1' })), 1);
+  assert.equal(googlePlacesPageSize(new URLSearchParams({ limit: '20' })), 20);
+  assert.equal(googlePlacesPageSize(new URLSearchParams({ limit: '200' })), 20);
+  assert.equal(googlePlacesPageSize(new URLSearchParams({ limit: 'nope' })), 5);
+});
+
+test('Nominatim boundary normalizer selects a drawable administrative polygon', () => {
+  const result = normalizeNominatimBoundary([
+    {
+      addresstype: 'state',
+      category: 'boundary',
+      type: 'administrative',
+      osm_type: 'relation',
+      osm_id: 123,
+      display_name: 'Test Region',
+      geojson: {
+        type: 'MultiPolygon',
+        coordinates: [
+          [[[20, 40], [21, 40], [21, 41], [20, 41], [20, 40]]],
+          [[[30, 30], [30.1, 30], [30.1, 30.1], [30, 30.1], [30, 30]]],
+        ],
+      },
+    },
+  ], 'state');
+
+  assert.equal(result.source, 'nominatim');
+  assert.equal(result.osmId, 123);
+  assert.equal(result.ring.length, 5);
+  assert.deepEqual(result.ring[0], [20, 40]);
+});
+
+test('Realtime voice defaults to cedar with a low, calm delivery', () => {
+  assert.match(voice, /OPENAI_REALTIME_VOICE_DEFAULT = 'cedar'/);
+  assert.match(voice, /calm, low-register, masculine-sounding delivery/);
+  assert.match(voice, /avoid high-pitched or theatrical intonation/);
+});
+
+test('Realtime VAD lets user speech interrupt an active response', () => {
+  const start = voice.indexOf("type: 'semantic_vad'");
+  assert.ok(start >= 0, 'semantic VAD configuration is missing');
+  const block = voice.slice(start, voice.indexOf('\n              },', start));
+  assert.match(block, /create_response: true/);
+  assert.match(block, /interrupt_response: true/);
 });
 
 test('Context panel opening stays distinct from Contacts activation', () => {
@@ -157,9 +286,9 @@ test('the edited existing tools changed exactly as intended', () => {
 });
 
 test('no unchanged Realtime tool definition drifts silently', () => {
-  // Context/Cockpit parity, the dependent-location wait edit, and the retired
-  // `bing-road` stack leaving `set_map_stack`'s enum are the known schema
-  // changes. Everything else must be byte-identical: an unnoticed edit
+  // Context/Cockpit parity, the dependent-location wait edit, the retired
+  // `bing-road` stack, the new bulk Places tool, and the admin-region annotation
+  // fact are the known schema changes. Everything else must be byte-identical: an unnoticed edit
   // to a shipped tool changes
   // model behavior in production with nothing in review to catch it.
   //
@@ -174,16 +303,18 @@ test('no unchanged Realtime tool definition drifts silently', () => {
     'fly_to_location',
     'select_nearest_aircraft',
     'set_map_stack',
+    'search_places',
+    'annotate_map',
   ]);
   const unchanged = realtimeTools()
     .filter((tool) => !TOUCHED.has(tool.name))
     .sort((a, b) => a.name.localeCompare(b.name));
-  assert.equal(unchanged.length, 21);
+  assert.equal(unchanged.length, 20);
   const digest = createHash('sha256')
     .update(JSON.stringify(unchanged))
     .digest('hex')
     .slice(0, 16);
-  assert.equal(digest, '802ed694b8887b88', 'an unchanged Realtime tool definition drifted');
+  assert.equal(digest, '349cef3189180b06', 'an unchanged Realtime tool definition drifted');
 });
 
 test('Radio volume and mission speed share the Sharpen slider visual language', () => {
@@ -213,28 +344,28 @@ test('Radio is nested inside Context with separate disclosure and power controls
   const contextEnd = html.indexOf('\n  </aside>', contextStart);
   assert.ok(contextStart >= 0 && radioStart > contextStart && radioStart < contextEnd);
   assert.match(html, /id="radio-panel"[^>]*data-panel-id="radio-panel"/);
-  assert.match(html, /aria-label="Radio playback"/);
+  assert.match(html, /aria-label="Воспроизведение радио"/);
   assert.match(html, /id="context-radio-toggle-btn"[^>]*aria-expanded="false"[^>]*aria-controls="context-radio-mini"/);
   assert.doesNotMatch(html, /id="context-radio-toggle-btn"[^>]*aria-pressed=/);
-  assert.match(html, /id="context-radio-mini"[^>]*aria-label="Compact Radio controls"[^>]*hidden/);
+  assert.match(html, /id="context-radio-mini"[^>]*aria-label="Компактное управление радио"[^>]*hidden/);
   assert.match(html, /id="context-radio-mini-enable-btn"[^>]*aria-pressed="false"/);
   assert.match(html, /id="context-radio-details-btn"[^>]*aria-expanded="false"[^>]*aria-controls="radio-panel"/);
   assert.match(html, /id="context-radio-details-btn"[\s\S]*?<span class="material-symbols-outlined" aria-hidden="true">open_in_full<\/span>/);
-  assert.match(html, /id="context-radio-mini-close-btn"[^>]*aria-label="Close compact Radio controls"/);
+  assert.match(html, /id="context-radio-mini-close-btn"[^>]*aria-label="Закрыть компактное управление радио"/);
   assert.match(html, /id="context-radio-mini-(?:prev|play|next)-btn"/);
   assert.match(html, /id="context-radio-mini-volume"/);
-  assert.match(html, /id="cockpit-radio-panel"[^>]*aria-label="Cockpit compact Radio controls"[^>]*hidden/);
+  assert.match(html, /id="cockpit-radio-panel"[^>]*aria-label="Компактное управление радио в кабине"[^>]*hidden/);
   assert.match(html, /id="cockpit-radio-enable-btn"[^>]*aria-pressed="false"/);
   assert.match(html, /id="cockpit-radio-(?:prev|play|next)-btn"/);
   assert.match(html, /id="cockpit-radio-volume"/);
   assert.match(html, /id="radio-tuner"[^>]*hidden/);
-  assert.match(html, /id="radio-tuner-band-label">DIRECTORY BAND/);
+  assert.match(html, /id="radio-tuner-band-label">ДИАПАЗОН КАТАЛОГА/);
   assert.match(html, /id="radio-tuner-slider"[^>]*type="range"/);
   assert.match(html, /id="radio-tuner-needle"[^>]*aria-hidden="true"/);
-  assert.match(html, /SNAPS TO AVAILABLE STATIONS/);
+  assert.match(html, /ФИКСИРУЕТСЯ НА ДОСТУПНЫХ СТАНЦИЯХ/);
   assert.match(html, /class="radio-tuner-scale" aria-hidden="true"><\/div>/);
-  assert.match(html, /DIRECTORY: RADIO BROWSER/);
-  assert.match(html, /Audio connects directly to the broadcaster/);
+  assert.match(html, /КАТАЛОГ: RADIO BROWSER/);
+  assert.match(html, /После запуска аудио подключается напрямую к вещателю/);
   assert.doesNotMatch(html, /radio-(?:favicon|visualizer|spectrum)/i);
   assert.match(css, /#radio-tuner-slider::-(?:webkit-slider-thumb|moz-range-thumb)/);
   assert.match(css, /\.radio-tuner\.is-static/);

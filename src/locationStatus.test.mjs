@@ -22,6 +22,19 @@ test('a preset city with no framed POI falls back to its first POI', () => {
   );
 });
 
+test('Russian display labels do not replace canonical search names', () => {
+  assert.deepEqual(
+    locationMiniStatus({
+      city: {
+        name: 'Istanbul',
+        label: 'Стамбул',
+        pois: [{ name: 'Hagia Sophia', label: 'Собор Святой Софии' }],
+      },
+    }),
+    { city: '📍 Стамбул', poi: 'Собор Святой Софии' },
+  );
+});
+
 test('a free-text search reports the destination, never the empty placeholder', () => {
   // The bug: a searched destination left the readout on "Location: --"
   // because only the preset-city path was rendered.
@@ -43,7 +56,7 @@ test('a free-text search reports the destination, never the empty placeholder', 
 test('a single-segment geocode says it was searched rather than inventing context', () => {
   assert.deepEqual(
     locationMiniStatus({ searchedLabel: 'Japan' }),
-    { city: '📍 Japan', poi: 'Searched location' },
+    { city: '📍 Japan', poi: 'Найденное место' },
   );
 });
 
@@ -55,7 +68,7 @@ test('a preset city outranks a stale searched label', () => {
 });
 
 test('nothing selected keeps the honest empty placeholder', () => {
-  const empty = { city: '📍 Location: --', poi: 'Landmark: --' };
+  const empty = { city: '📍 Местоположение: --', poi: 'Ориентир: --' };
   assert.deepEqual(locationMiniStatus(), empty);
   assert.deepEqual(locationMiniStatus({ city: null, searchedLabel: '' }), empty);
   assert.deepEqual(locationMiniStatus({ searchedLabel: '   ,  , ' }), empty);

@@ -7,6 +7,8 @@
  * multi-step ENTRY TRANSACTION (adopt → enter → roll back).
  */
 
+import { t } from './i18n/index.js';
+
 /** Force the prior aircraft layer to reacquire Cesium and durable tracking ownership. */
 export function restoreAircraftTrackingOwner(layer, id, { origin = 'programmatic' } = {}) {
   if (!layer?.trackById || !id) return false;
@@ -50,7 +52,7 @@ export function enterCockpitWithTracking({
       activeLayer = selectedLayer;
       activeTarget = selectedTarget;
       if (!selectedLayer.trackById?.(selectedTarget.id, { origin: selectionOrigin })) {
-        entryError = new Error('Selected aircraft could not be tracked for Cockpit entry');
+        entryError = new Error(t('cockpit.aircraftTrackingFailed'));
       }
     }
     if (!entryError) entered = Boolean(cockpitView.enter());
@@ -71,7 +73,7 @@ export function enterCockpitWithTracking({
         restoreTarget.id,
         { origin: selectionOrigin },
       )) {
-        entryError ||= new Error('Prior aircraft tracking could not be restored');
+        entryError ||= new Error(t('cockpit.trackingRestoreFailed'));
       }
     } catch (error) {
       entryError ||= error instanceof Error ? error : new Error(String(error));
@@ -85,8 +87,11 @@ export function enterCockpitWithTracking({
     }
   }
 
+  const entryMessage = String(entryError?.message || '').trim();
   return {
     entered,
-    error: entered ? null : entryError?.message || 'Cockpit entry was unavailable',
+    error: entered
+      ? null
+      : (/[А-Яа-яЁё]/.test(entryMessage) ? entryMessage : t('cockpit.entryUnavailable')),
   };
 }

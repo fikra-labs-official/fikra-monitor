@@ -236,7 +236,7 @@ export function createAisWatchdog(options = {}) {
     if (!env.hasKey) {
       const actions = terminateOwned('key-absent');
       status = 'missing-key';
-      error = 'AISSTREAM_API_KEY is not set';
+      error = 'AISSTREAM_API_KEY не задан';
       reconnectAttempt = 0;
       keyFingerprint = null;
       return actions;
@@ -244,7 +244,7 @@ export function createAisWatchdog(options = {}) {
     if (env.hasTransport === false) {
       const actions = terminateOwned('no-transport');
       status = 'unsupported';
-      error = 'Node WebSocket transport is unavailable';
+      error = 'Транспорт Node WebSocket недоступен';
       return actions;
     }
 
@@ -315,7 +315,7 @@ export function createAisWatchdog(options = {}) {
       if (!silenceWatchArmed) return [];
       const silentFor = monoNow - silenceSinceMono;
       if (silentFor >= recycleAfterMs) {
-        error = `AISStream delivered no data for ${Math.round(silentFor / 1000)}s`;
+        error = `AISStream не передает данные ${Math.round(silentFor / 1000)} с`;
         const actions = terminateOwned('silent');
         scheduleRetry('transport');
         return actions;
@@ -382,7 +382,7 @@ export function createAisWatchdog(options = {}) {
   function onClose(eventGeneration) {
     if (!ownsGeneration(eventGeneration)) return [];
     release();
-    if (!error) error = 'AISStream websocket closed';
+    if (!error) error = 'Соединение AISStream закрыто';
     scheduleRetry('transport');
     return [];
   }
@@ -470,9 +470,9 @@ export function createAisWatchdog(options = {}) {
 }
 
 function defaultFailureMessage(kind) {
-  if (kind === 'auth') return 'AISStream rejected the API key';
-  if (kind === 'rate-limit') return 'AISStream rate-limited this key';
-  return 'AISStream websocket error';
+  if (kind === 'auth') return 'AISStream отклонил ключ API';
+  if (kind === 'rate-limit') return 'AISStream ограничил частоту запросов для этого ключа';
+  return 'Ошибка соединения AISStream';
 }
 
 function positiveOr(value, fallback) {

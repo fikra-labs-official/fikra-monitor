@@ -10,53 +10,13 @@ import { loadViteFromCanonicalRoot } from '../scripts/pinokio-start.mjs';
 
 const require = createRequire(import.meta.url);
 
-const PROVIDER_FIELDS = [
-  'GOOGLE_MAPS_API_KEY',
-  'CESIUM_ION_TOKEN',
-  'OPENAI_API_KEY',
-  'AISSTREAM_API_KEY',
-  'FIRMS_MAP_KEY',
-  'TOMTOM_API_KEY',
-  'OPENSKY_CLIENT_ID',
-  'OPENSKY_CLIENT_SECRET',
-  'LL2_API_TOKEN',
-];
-const RATE_LIMIT_FIELDS = [
-  'GEV_RATELIMIT_OPENAI_PER_MIN',
-  'GEV_RATELIMIT_GOOGLE_PER_MIN',
-];
-const APP_VALUE_FIELDS = [...PROVIDER_FIELDS, ...RATE_LIMIT_FIELDS];
-const SHARING_FIELDS = [
-  'PINOKIO_SHARE_CLOUDFLARE',
-  'PINOKIO_SHARE_LOCAL',
-  'PINOKIO_SHARE_VAR',
-];
-
-function assertAppFieldForwarded(env, field) {
-  assert.equal(env[field], `{{env.${field} || ""}}`);
-}
-
 test('Pinokio start has one fail-closed launcher process', () => {
   const script = require('../pinokio/start.js');
   assert.equal(script.run[0].params.message, 'node scripts/pinokio-start.mjs');
   assert.equal(Array.isArray(script.run[0].params.message), false);
   assert.match(script.run[0].params.on[0].event, /\\\[Pinokio\\\] Ready at/);
-  for (const field of APP_VALUE_FIELDS) {
-    assertAppFieldForwarded(script.run[0].params.env, field);
-  }
-  assert.equal('PINOKIO_SHARE_PASSCODE' in script.run[0].params.env, false);
-  assert.equal(
-    script.run[0].params.env.PINOKIO_SHARE_CLOUDFLARE,
-    '{{env.PINOKIO_SHARE_CLOUDFLARE || "false"}}',
-  );
-  assert.equal(
-    script.run[0].params.env.PINOKIO_SHARE_LOCAL,
-    '{{env.PINOKIO_SHARE_LOCAL || "false"}}',
-  );
-  assert.equal(
-    script.run[0].params.env.PINOKIO_SHARE_VAR,
-    '{{env.PINOKIO_SHARE_VAR || "__gev_sharing_disabled__"}}',
-  );
+  assert.deepEqual(script.run[0].params.env, { HOST: '127.0.0.1', PORT: '{{port}}' });
+  assert.doesNotMatch(JSON.stringify(script), /\{\{env\./);
 });
 
 test('Pinokio install records success explicitly instead of trusting node_modules', async () => {
@@ -69,12 +29,8 @@ test('Pinokio install records success explicitly instead of trusting node_module
   assert.match(installSource, /authoritativeEnvironment: true/);
   assert.match(installSource, /applyPinokioEnvironment\(\)/);
   assert.match(installSource, /Return to Pinokio and choose Start/);
-  for (const field of APP_VALUE_FIELDS) {
-    assertAppFieldForwarded(install.run.at(-1).params.env, field);
-  }
-  for (const field of SHARING_FIELDS) {
-    assert.equal(field in install.run.at(-1).params.env, false);
-  }
+  assert.equal('env' in install.run.at(-1).params, false);
+  assert.doesNotMatch(JSON.stringify(install), /\{\{env\./);
 });
 
 test('Pinokio menu resolves the nested install marker and exposes each lifecycle state', async (t) => {
@@ -181,15 +137,11 @@ test('Pinokio direct execution fallback remains exact and Update-safe', () => {
   assert.equal(isDirectInvocation('', installPath), false);
 });
 
-test('Pinokio Update forwards the app fields used by its install doctor', () => {
+test('Pinokio Update keeps credential values out of shell task metadata', () => {
   const update = require('../pinokio/update.js');
   assert.equal(update.run[0].params.message, 'node scripts/pinokio-update.mjs');
-  for (const field of APP_VALUE_FIELDS) {
-    assertAppFieldForwarded(update.run[0].params.env, field);
-  }
-  for (const field of SHARING_FIELDS) {
-    assert.equal(field in update.run[0].params.env, false);
-  }
+  assert.equal('env' in update.run[0].params, false);
+  assert.doesNotMatch(JSON.stringify(update), /\{\{env\./);
 });
 
 test('Pinokio start runner emits an ANSI-independent ready URL', async () => {
@@ -231,8 +183,5 @@ test('Pinokio keeps the supported local.url readiness key while disabling its sh
   assert.equal(script.run[1].method, 'local.set');
   assert.equal(script.run[1].params.url, '{{input.event[1]}}');
   assert.match(menuSource, /local\?\.url/);
-  assert.equal(
-    script.run[0].params.env.PINOKIO_SHARE_VAR,
-    '{{env.PINOKIO_SHARE_VAR || "__gev_sharing_disabled__"}}',
-  );
+  assert.equal('PINOKIO_SHARE_VAR' in script.run[0].params.env, false);
 });

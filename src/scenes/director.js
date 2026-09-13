@@ -13,6 +13,7 @@
  */
 
 import * as Cesium from 'cesium';
+import { t } from '../i18n/index.js';
 import { SCENE_RECIPES } from './recipes.js';
 import { sceneLayerPlan, sceneRequiresContextModeExit } from './scenePolicy.js';
 import {
@@ -31,6 +32,40 @@ const PROJECT_VERSION = 3;
 const DEFAULT_SHOT_DURATION_SEC = 4;
 /** @constant {number} Default hold/pause after a shot completes (seconds) */
 const DEFAULT_HOLD_SEC = 0.9;
+
+const SCENE_STYLE_KEYS = Object.freeze({
+  normal: 'scene.style.normal',
+  retro: 'scene.style.retro',
+  surveillance: 'scene.style.surveillance',
+  thermal: 'scene.style.thermal',
+  anime: 'scene.style.anime',
+  noir: 'scene.style.noir',
+  snow: 'scene.style.snow',
+});
+
+const SCENE_DETECTION_KEYS = Object.freeze({
+  OFF: 'scene.detection.off',
+  SPARSE: 'scene.detection.sparse',
+  SURVEY: 'scene.detection.sparse',
+  BALANCED: 'scene.detection.balanced',
+  NORMAL: 'scene.detection.balanced',
+  DENSE: 'scene.detection.dense',
+  PANOPTIC: 'scene.detection.dense',
+  GOD: 'scene.detection.dense',
+  ON: 'scene.detection.dense',
+});
+
+/** Translate a persisted style ID without changing the stored machine value. */
+export function sceneStyleDisplayName(style) {
+  const key = SCENE_STYLE_KEYS[String(style || 'normal').trim().toLowerCase()];
+  return t(key || 'scene.style.unknown');
+}
+
+/** Translate a persisted detection enum without changing the stored machine value. */
+export function sceneDetectionDisplayName(mode) {
+  const key = SCENE_DETECTION_KEYS[String(mode || 'OFF').trim().toUpperCase()];
+  return t(key || 'scene.detection.unknown');
+}
 
 /**
  * Clamp a numeric value to the [0, 1] range.
@@ -132,7 +167,7 @@ function recipeToScene(recipe) {
   const path = recipe.cameraPath || [];
   const shots = path.map((keyframe, idx) => ({
     id: uid('shot'),
-    title: `Shot ${idx + 1}`,
+    title: t('scene.shot', { number: idx + 1 }),
     durationSec: Math.max(0.2, keyframe.duration || DEFAULT_SHOT_DURATION_SEC),
     holdSec: Math.max(0, keyframe.hold || 0),
     camera: {
@@ -171,7 +206,7 @@ function recipeToScene(recipe) {
 
   return {
     id: recipe.id || uid('scene'),
-    title: recipe.title || 'Untitled Scene',
+    title: recipe.title || t('scene.defaultTitle'),
     shots,
   };
 }
@@ -209,7 +244,7 @@ function normalizeShot(rawShot, index = 0, { projectVersion = PROJECT_VERSION } 
 
   return {
     id: rawShot?.id || uid('shot'),
-    title: rawShot?.title || `Shot ${index + 1}`,
+    title: rawShot?.title || t('scene.shot', { number: index + 1 }),
     durationSec: Math.max(0.2, Number(rawShot?.durationSec) || DEFAULT_SHOT_DURATION_SEC),
     holdSec: Math.max(0, Number(rawShot?.holdSec) || 0),
     camera: {
@@ -262,7 +297,7 @@ function normalizeProject(rawProject) {
       const shots = shotsRaw.map((shot, shotIdx) => normalizeShot(shot, shotIdx, { projectVersion }));
       return {
         id: scene?.id || uid('scene'),
-        title: scene?.title || `Scene ${sceneIdx + 1}`,
+        title: scene?.title || t('scene.name', { number: sceneIdx + 1 }),
         shots,
       };
     })
@@ -377,7 +412,7 @@ export class SceneDirector {
 
   /** Surface a "scene not saved" notice via the global toast + scene status line. */
   _toastStorageError() {
-    const message = 'Scene not saved — browser storage unavailable';
+    const message = t('scene.status.storageUnavailable');
     this._updateStatus(message);
     try {
       const toast = document.getElementById('toast');
@@ -419,7 +454,7 @@ export class SceneDirector {
     });
 
     this._sceneStopBtn?.addEventListener('click', () => {
-      this.stopScene('Stopped');
+      this.stopScene(t('scene.status.stopped'));
     });
 
     this._sceneNextBtn?.addEventListener('click', () => {
@@ -445,7 +480,7 @@ export class SceneDirector {
       this.downloadLastRunMetadata();
     });
 
-    this._updateStatus('Ready');
+    this._updateStatus(t('scene.status.ready'));
     this._setProgress(0);
     this._setButtons(false);
   }
@@ -486,7 +521,7 @@ export class SceneDirector {
     if (!scene || scene.shots.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'scene-shot-empty';
-      empty.textContent = 'No shots yet. Use CAPTURE SHOT to save current look.';
+      empty.textContent = t('scene.ui.emptyShots');
       this._sceneShotList.appendChild(empty);
       return;
     }
@@ -512,7 +547,7 @@ export class SceneDirector {
         this._renderShotList();
       });
       label.addEventListener('dblclick', () => {
-        const nextTitle = window.prompt('Shot title', shot.title);
+        const nextTitle = window.prompt(t('scene.ui.shotTitle'), shot.title);
         if (!nextTitle) return;
         shot.title = nextTitle.trim() || shot.title;
         this._saveProject();
@@ -524,14 +559,14 @@ export class SceneDirector {
 
       const loadBtn = document.createElement('button');
       loadBtn.className = 'scene-shot-btn';
-      loadBtn.textContent = 'LOAD';
+      loadBtn.textContent = t('data.action.load');
       loadBtn.addEventListener('click', () => {
         this.loadShot(scene.id, shot.id);
       });
 
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'scene-shot-btn scene-shot-danger';
-      deleteBtn.textContent = 'DEL';
+      deleteBtn.textContent = t('data.action.delete');
       deleteBtn.addEventListener('click', () => {
         this.deleteShot(scene.id, shot.id);
       });
@@ -543,9 +578,9 @@ export class SceneDirector {
 
       const meta = document.createElement('div');
       meta.className = 'scene-shot-meta';
-      const mode = shot.visual?.detection?.mode || 'OFF';
-      const style = shot.visual?.style || 'normal';
-      meta.textContent = `${style.toUpperCase()} · ${mode} · ${shot.durationSec.toFixed(1)}s + ${shot.holdSec.toFixed(1)}s`;
+      const mode = sceneDetectionDisplayName(shot.visual?.detection?.mode);
+      const style = sceneStyleDisplayName(shot.visual?.style);
+      meta.textContent = `${style} · ${mode} · ${shot.durationSec.toFixed(1)} с + ${shot.holdSec.toFixed(1)} с`;
 
       row.appendChild(top);
       row.appendChild(meta);
@@ -575,12 +610,13 @@ export class SceneDirector {
 
   /** Prompt the user for a name and append a new empty scene to the project. */
   _createScene() {
-    const sceneName = window.prompt('New scene name', `Scene ${this._project.scenes.length + 1}`);
+    const fallbackName = t('scene.name', { number: this._project.scenes.length + 1 });
+    const sceneName = window.prompt(t('scene.ui.newName'), fallbackName);
     if (!sceneName) return;
 
     const scene = {
       id: uid('scene'),
-      title: sceneName.trim() || `Scene ${this._project.scenes.length + 1}`,
+      title: sceneName.trim() || fallbackName,
       shots: [],
     };
 
@@ -597,7 +633,7 @@ export class SceneDirector {
     const scene = this._getSelectedScene();
     if (!scene) return;
 
-    const ok = window.confirm(`Delete scene "${scene.title}" and all shots?`);
+    const ok = window.confirm(`Удалить сцену «${scene.title}» и все ее кадры?`);
     if (!ok) return;
 
     this._project.scenes = this._project.scenes.filter((item) => item.id !== scene.id);
@@ -639,13 +675,13 @@ export class SceneDirector {
 
     const camera = this.styleManager.getCameraState();
     if (!camera) {
-      this._updateStatus('Cannot capture shot: camera not ready');
+      this._updateStatus(t('scene.status.cameraNotReady'));
       return;
     }
 
     const shot = normalizeShot({
       id: uid('shot'),
-      title: `Shot ${scene.shots.length + 1}`,
+      title: t('scene.shot', { number: scene.shots.length + 1 }),
       durationSec: DEFAULT_SHOT_DURATION_SEC,
       holdSec: DEFAULT_HOLD_SEC,
       camera,
@@ -657,7 +693,7 @@ export class SceneDirector {
     this._selectedShotId = shot.id;
     this._saveProject();
     this._renderShotList();
-    this._updateStatus(`Captured: ${scene.title} / ${shot.title}`);
+    this._updateStatus(`Сохранено: ${scene.title} / ${shot.title}`);
   }
 
   /**
@@ -670,7 +706,7 @@ export class SceneDirector {
 
     const shot = scene.shots.find((item) => item.id === this._selectedShotId);
     if (!shot) {
-      this._updateStatus('Select a shot first');
+      this._updateStatus(t('scene.status.selectShot'));
       return;
     }
 
@@ -683,7 +719,7 @@ export class SceneDirector {
 
     this._saveProject();
     this._renderShotList();
-    this._updateStatus(`Updated: ${scene.title} / ${shot.title}`);
+    this._updateStatus(`Обновлено: ${scene.title} / ${shot.title}`);
   }
 
   /**
@@ -695,7 +731,7 @@ export class SceneDirector {
     const { scene, shot } = this._getShot(sceneId, shotId);
     if (!scene || !shot) return;
 
-    const ok = window.confirm(`Delete shot "${shot.title}"?`);
+    const ok = window.confirm(`Удалить кадр «${shot.title}»?`);
     if (!ok) return;
 
     scene.shots = scene.shots.filter((item) => item.id !== shot.id);
@@ -747,7 +783,7 @@ export class SceneDirector {
     if (token.cancelled) return;
 
     if (this._loadAbort === controller) this._loadAbort = null;
-    this._updateStatus(`Loaded: ${scene.title} / ${shot.title}`);
+    this._updateStatus(`Загружено: ${scene.title} / ${shot.title}`);
     this._updateRuntime('');
   }
 
@@ -783,7 +819,7 @@ export class SceneDirector {
     if (typeof this.styleManager?.runImmediateNavigation !== 'function') return true;
     const claimed = this.styleManager.runImmediateNavigation('scene', () => true);
     if (claimed === false) {
-      this._updateStatus('Camera unavailable — exit cockpit first');
+      this._updateStatus(t('scene.status.cameraUnavailable'));
       return false;
     }
     return true;
@@ -880,7 +916,7 @@ export class SceneDirector {
 
     const queue = this._buildPlaybackQueue(sceneId || this._selectedSceneId || this._project.scenes[0]?.id, { single });
     if (!queue.length) {
-      this._updateStatus('No shots to run');
+      this._updateStatus(t('scene.status.noShots'));
       return { started: false, reason: 'no-shots' };
     }
 
@@ -928,7 +964,7 @@ export class SceneDirector {
     // Initialize telemetry accumulator for this run
     this._activeRun = {
       recipeId: `project-${PROJECT_VERSION}`,
-      title: 'Editable Scene Run',
+      title: t('scene.editableRun'),
       startedAt: new Date().toISOString(),
       estimatedDurationSec,
       scenesRun: queue.length,
@@ -951,7 +987,7 @@ export class SceneDirector {
         this._renderSceneSelect();
         this._renderShotList();
 
-        this._updateStatus(`Running ${idx + 1}/${queue.length}: ${scene.title} / ${shot.title}`);
+        this._updateStatus(`Воспроизведение ${idx + 1}/${queue.length}: ${scene.title} / ${shot.title}`);
         this._updateRuntime(`${scene.title} · ${shot.title}`);
 
         this._logEvent('shot_start', {
@@ -991,11 +1027,11 @@ export class SceneDirector {
 
       if (!token.cancelled) {
         this._setProgress(1);
-        this._updateStatus('Scene run complete');
+        this._updateStatus(t('scene.status.complete'));
         this._logEvent('scene_run_complete', {});
       }
     } catch (error) {
-      this._updateStatus(`Error: ${error.message || 'run failed'}`);
+      this._updateStatus(`Ошибка: ${error.message || 'запуск не удался'}`);
       this._logEvent('scene_run_error', { message: error.message || 'unknown error' });
     } finally {
       this._finishRun();
@@ -1035,7 +1071,7 @@ export class SceneDirector {
    *
    * @param {string} [reason='Stopped'] - Human-readable cancellation reason
    */
-  stopScene(reason = 'Stopped') {
+  stopScene(reason = t('scene.status.stopped')) {
     if (!this._running || !this._runToken) return;
     this._runToken.cancelled = true;
     this._runAbort?.abort();
@@ -1076,9 +1112,9 @@ export class SceneDirector {
       this._saveProject();
       this._renderSceneSelect();
       this._renderShotList();
-      this._updateStatus(`Imported ${file.name}`);
+      this._updateStatus(`Импортировано: ${file.name}`);
     } catch {
-      this._updateStatus('Import failed (invalid JSON)');
+      this._updateStatus(t('scene.status.importFailed'));
     }
   }
 
@@ -1157,7 +1193,7 @@ export class SceneDirector {
     }
 
     if (refused.length) {
-      this._updateStatus(`Layers refused: ${refused.join(', ')}`);
+      this._updateStatus(`Не удалось включить слои: ${refused.join(', ')}`);
       this._logEvent('shot_layers_refused', { layerIds: [...refused] });
     }
     return { applied, refused, cancelled: false };
@@ -1193,7 +1229,7 @@ export class SceneDirector {
     const result = await this.styleManager.setContextMode('off');
     if (result && result.ok === false) {
       console.warn(`[Scenes] Could not exit ${mode}:`, result.error || 'unknown reason');
-      this._updateStatus(`Could not exit ${mode} — scene layers may be refused`);
+      this._updateStatus(`Не удалось выйти из режима ${mode}. Некоторые слои сцены могут не включиться`);
       this._logEvent('context_mode_exit_failed', { mode, error: result.error || null });
       return false;
     }
@@ -1385,7 +1421,7 @@ export class SceneDirector {
    */
   _onKeyDown(event) {
     if (event.key === ESCAPE_KEY && this._running) {
-      this.stopScene('Stopped (Esc)');
+      this.stopScene(t('scene.status.stoppedEsc'));
     }
   }
 }

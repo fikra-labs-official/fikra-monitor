@@ -1033,7 +1033,7 @@ test('accessible actions announce only accepted focus and expose selected state'
   assert.equal(list.children[0]['aria-pressed'], 'true');
   list.children[0].click();
   assert.equal(acceptedActivations, 1);
-  assert.equal(status.textContent, 'Focusing Focus vessel TEST, MMSI 123');
+  assert.equal(status.textContent, 'Фокус на объекте: Focus vessel TEST, MMSI 123');
 
   status.textContent = 'Focus unchanged';
   setOverlayEntries('accessible-actions', [selectedEntry('vessel:123', {

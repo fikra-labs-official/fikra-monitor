@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { t } from '../i18n/index.js';
 import { governorRequestRender } from '../renderGovernor.js';
 import {
   clearSelectedEntityContextForLayer,
@@ -23,6 +24,14 @@ const LAYER_ID = 'military-installations';
 const REQUEST_DEBOUNCE_MS = 500;
 const MAX_VIEWPORT_DEGREES = 10;
 const MAX_RENDERED = 700;
+
+const INSTALLATION_CLASS_LABEL = Object.freeze({
+  airfield: 'ВОЕННЫЙ АЭРОДРОМ',
+  naval_base: 'ВОЕННО-МОРСКАЯ БАЗА',
+  range: 'ПОЛИГОН',
+  military_land: 'ВОЕННАЯ ТЕРРИТОРИЯ',
+  installation: 'ОБЪЕКТ',
+});
 const GOOGLE_MILITARY_PLACE_TYPES = new Set(['military_base']);
 const COLOR_BY_CLASS = {
   airfield: '#5aa9ff',
@@ -107,7 +116,7 @@ export function installationSourceLabel(record) {
   const names = [...new Set((Array.isArray(record?.sources) ? record.sources : [])
     .map((source) => String(source?.name || '').trim())
     .filter(Boolean))];
-  return names.join(' + ') || 'Unknown mapped source';
+  return names.join(' + ') || 'Неизвестный источник карты';
 }
 
 /**
@@ -273,16 +282,16 @@ function renderRecords() {
     entity.gevTrackedId = `installations:${record.id}`;
     entity.gevDisplayPosition = () => displayPosition;
     entity.gevLabelModel = {
-      title: record.name || 'MAPPED INSTALLATION',
-      details: [String(record.class || 'installation').replaceAll('_', ' ').toUpperCase()],
+      title: record.name || 'ОБЪЕКТ НА КАРТЕ',
+      details: [INSTALLATION_CLASS_LABEL[record.class] || 'ОБЪЕКТ'],
       accent: COLOR_BY_CLASS[record.class] || '#9ca6b0',
     };
     registerEntityContext(entity, {
       id: record.id,
       layerId: LAYER_ID,
       layerName: record.kind === 'place_candidate'
-        ? 'Military Site Search Candidates'
-        : 'Mapped Military Installations',
+        ? 'Кандидаты из поиска военных объектов'
+        : 'Военные объекты на карте',
       source: installationSourceLabel(record),
       label: record.name,
       latitude: record.latitude,
@@ -408,7 +417,7 @@ async function loadInstallations() {
     state.abort = null;
     state.loading = false;
     clearUnavailableRetry();
-    setInstallationStatus('zoom-in', 'Zoom in to load mapped installation context');
+    setInstallationStatus('zoom-in', 'Приблизьте карту, чтобы загрузить объекты');
     return;
   }
   state.abort?.abort();
@@ -476,7 +485,7 @@ async function loadInstallations() {
         }
       } catch (error) {
         if (error?.name === 'AbortError') return;
-        placesError = 'Google Places search unavailable; showing mapped sites';
+        placesError = 'Поиск Google Places недоступен. Показаны объекты с карты';
       }
     }
     await resolveGroundFloorCellsBounded(records.map((record) => ({
@@ -495,14 +504,14 @@ async function loadInstallations() {
     setInstallationStatus(
       state.records.length ? (state.stale ? 'stale' : 'ready') : 'empty',
       payload.status === 'stale'
-        ? 'Serving cached mapped context'
-        : (saturated ? 'Too many mapped sites in view to list them all' : placesError),
+        ? 'Показан сохраненный контекст карты'
+        : (saturated ? 'В поле зрения слишком много объектов, чтобы показать их все' : placesError),
     );
     renderRecords();
     warmInstallationFloors(state.records);
   } catch (error) {
     if (error?.name === 'AbortError') return;
-    setInstallationStatus('unavailable', error?.message || 'Installation context unavailable');
+    setInstallationStatus('unavailable', error?.message || 'контекст объектов недоступен');
     scheduleUnavailableRetry();
   } finally {
     // An older aborted request must not clear a newer request's busy state.
@@ -515,9 +524,9 @@ async function loadInstallations() {
 
 const militaryInstallationsLayer = {
   id: LAYER_ID,
-  name: 'Mapped Installations',
+  name: t('data.layer.installations'),
   icon: '⌖',
-  source: 'OpenStreetMap + optional Google Maps Places',
+  source: 'OpenStreetMap + Google Maps Places (опционально)',
   updateInterval: 0,
   statsRefreshInterval: 1000,
   init(viewer) {
@@ -632,7 +641,7 @@ const militaryInstallationsLayer = {
       error: state.error,
       status: state.status,
       loading: state.loading,
-      loadingLabel: state.loading ? 'loading mapped installation context' : '',
+      loadingLabel: state.loading ? 'загрузка объектов на карте' : '',
     };
   },
 };

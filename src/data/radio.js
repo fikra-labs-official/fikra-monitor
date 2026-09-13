@@ -9,6 +9,7 @@
  * @module radio
  */
 import * as Cesium from 'cesium';
+import { t } from '../i18n/index.js';
 import { cachedGroundFloor, warmGroundFloor } from './groundFloor.js';
 import { normalizeRadioCountryInput } from './radioCountry.js';
 import { normalizeRadioFilter } from './layerState.js';
@@ -75,31 +76,31 @@ export const DEFAULT_RADIO_FILTER = 'all';
 export const GLOBAL_RADIO_ALTITUDE_M = 2_000_000;
 
 const MUSIC_GENRES = Object.freeze([
-  ['alternative', 'Alternative'],
-  ['ambient', 'Ambient'],
-  ['blues', 'Blues'],
-  ['classical', 'Classical'],
-  ['country', 'Country'],
-  ['dance', 'Dance'],
-  ['electronic', 'Electronic'],
-  ['folk', 'Folk'],
-  ['funk', 'Funk'],
+  ['alternative', 'Альтернативная'],
+  ['ambient', 'Эмбиент'],
+  ['blues', 'Блюз'],
+  ['classical', 'Классика'],
+  ['country', 'Кантри'],
+  ['dance', 'Танцевальная'],
+  ['electronic', 'Электронная'],
+  ['folk', 'Фолк'],
+  ['funk', 'Фанк'],
   ['hip hop', 'Hip-Hop'],
-  ['house', 'House'],
-  ['indie', 'Indie'],
-  ['jazz', 'Jazz'],
-  ['latin', 'Latin'],
-  ['metal', 'Metal'],
-  ['oldies', 'Oldies'],
-  ['pop', 'Pop'],
-  ['punk', 'Punk'],
+  ['house', 'Хаус'],
+  ['indie', 'Инди'],
+  ['jazz', 'Джаз'],
+  ['latin', 'Латино'],
+  ['metal', 'Метал'],
+  ['oldies', 'Ретро'],
+  ['pop', 'Поп'],
+  ['punk', 'Панк'],
   ['r&b', 'R&B'],
-  ['reggae', 'Reggae'],
-  ['rock', 'Rock'],
-  ['soul', 'Soul'],
-  ['techno', 'Techno'],
-  ['trance', 'Trance'],
-  ['world', 'World'],
+  ['reggae', 'Регги'],
+  ['rock', 'Рок'],
+  ['soul', 'Соул'],
+  ['techno', 'Техно'],
+  ['trance', 'Транс'],
+  ['world', 'Этника'],
 ]);
 
 const CATEGORY_MATCHERS = Object.freeze({
@@ -124,14 +125,14 @@ const RADIO_CATEGORY_COLORS = Object.freeze({
 });
 
 const RADIO_CLUSTER_LABELS = Object.freeze({
-  news: 'NEWS',
-  talk: 'TALK',
-  weather: 'WEATHER',
-  'public-safety': 'SAFETY',
-  'aviation-marine': 'AIR / SEA',
-  'traffic-transit': 'TRANSIT',
-  music: 'MUSIC',
-  other: 'OTHER',
+  news: 'НОВОСТИ',
+  talk: 'РАЗГОВОРЫ',
+  weather: 'ПОГОДА',
+  'public-safety': 'БЕЗОПАСНОСТЬ',
+  'aviation-marine': 'АВИА / МОРЕ',
+  'traffic-transit': 'ТРАНСПОРТ',
+  music: 'МУЗЫКА',
+  other: 'ДРУГОЕ',
 });
 
 const RADIO_MARKER_CATEGORY_ORDER = Object.freeze([
@@ -805,14 +806,14 @@ export function radioStationCategoryId(station) {
 export function buildRadioCategories(stations) {
   const rows = Array.isArray(stations) ? stations : [];
   const categories = [
-    { id: 'all', label: 'All' },
-    { id: 'news', label: 'News' },
-    { id: 'talk', label: 'Talk' },
-    { id: 'weather', label: 'Weather / Emergency' },
-    { id: 'public-safety', label: 'Public Safety' },
-    { id: 'aviation-marine', label: 'Aviation / Marine' },
-    { id: 'traffic-transit', label: 'Traffic / Transit' },
-    { id: 'music', label: 'Music' },
+    { id: 'all', label: 'Все' },
+    { id: 'news', label: 'Новости' },
+    { id: 'talk', label: 'Разговоры' },
+    { id: 'weather', label: 'Погода / чрезвычайные ситуации' },
+    { id: 'public-safety', label: 'Общественная безопасность' },
+    { id: 'aviation-marine', label: 'Авиация / море' },
+    { id: 'traffic-transit', label: 'Дороги / транзит' },
+    { id: 'music', label: 'Музыка' },
   ];
 
   for (const [genre, label] of MUSIC_GENRES) {
@@ -821,7 +822,7 @@ export function buildRadioCategories(stations) {
       categories.push({ id, label });
     }
   }
-  categories.push({ id: 'other', label: 'Other' });
+  categories.push({ id: 'other', label: 'Другое' });
   return categories.map((category) => ({
     ...category,
     color: radioCategoryColor(category.id),
@@ -1329,7 +1330,7 @@ function installAudio({ replace = false } = {}) {
     const attempt = _activePlaybackAttempt;
     if (tryRadioFallback(failedId, attempt?.origin, attempt?.id)) return;
     _audioState = 'error';
-    _audioError = 'Broadcaster stream is unavailable or blocked by the browser.';
+    _audioError = 'Поток радиостанции недоступен или заблокирован браузером.';
     emitState();
   });
 }
@@ -1819,8 +1820,8 @@ export async function playSelectedRadio({ origin = 'programmatic', attemptId = n
     if (tryRadioFallback(station.id, origin, ownedAttemptId)) return false;
     _audioState = 'error';
     _audioError = error?.name === 'NotAllowedError'
-      ? 'Playback requires a direct click or tap.'
-      : 'Broadcaster stream could not be started.';
+      ? 'Для воспроизведения нажмите или коснитесь экрана.'
+      : 'Не удалось запустить поток радиостанции.';
     emitState();
     return false;
   }
@@ -2583,7 +2584,7 @@ function removeInteraction() {
 /** Radio layer lifecycle implementation. */
 export const radioLayer = {
   id: 'radio',
-  name: 'Radio',
+  name: t('data.layer.radio'),
   icon: '◉',
   source: 'Radio Browser',
   updateInterval: 45 * 60 * 1000,
@@ -2595,7 +2596,7 @@ export const radioLayer = {
     resetRadioClusterOverlayIdentities();
     installAudio();
     if (!_dataSource) {
-      _dataSource = new Cesium.CustomDataSource('Radio stations');
+      _dataSource = new Cesium.CustomDataSource('Радиостанции');
       viewer.dataSources.add(_dataSource);
       installClusterStyling();
     }
@@ -2676,7 +2677,7 @@ export const radioLayer = {
         sessionGeneration,
         _sessionGeneration,
       )) return;
-      if (!Array.isArray(body?.stations)) throw new Error('Radio directory response was malformed');
+      if (!Array.isArray(body?.stations)) throw new Error('Некорректный ответ каталога радиостанций');
       const updatedAt = typeof body.updatedAt === 'string' && Number.isFinite(Date.parse(body.updatedAt))
         ? body.updatedAt
         : null;
@@ -2687,24 +2688,24 @@ export const radioLayer = {
         || updatedAtMs > Date.now() + RADIO_DIRECTORY_FUTURE_SKEW_MS
         || typeof body.stale !== 'boolean'
         || typeof body.degraded !== 'boolean'
-      ) throw new Error('Radio directory freshness metadata was malformed');
+      ) throw new Error('Некорректные данные об актуальности каталога радиостанций');
       const rows = body.stations;
       const acceptedRows = rows.filter(isValidRadioDirectoryStation);
-      if (!acceptedRows.length) throw new Error('Radio directory returned no usable stations');
+      if (!acceptedRows.length) throw new Error('Каталог не вернул доступных радиостанций');
       if (acceptedRows.length !== rows.length) {
-        throw new Error('Radio directory response contained malformed stations');
+        throw new Error('Ответ каталога содержит некорректные радиостанции');
       }
       const acceptedGeneration = body.acceptedGeneration;
       if (
         acceptedGeneration !== null
         && (!Number.isSafeInteger(acceptedGeneration) || acceptedGeneration < 1)
-      ) throw new Error('Radio directory generation metadata was malformed');
+      ) throw new Error('Некорректные данные версии каталога радиостанций');
       if (!body.stale && !body.degraded && acceptedGeneration === null) {
-        throw new Error('Radio directory omitted its accepted generation');
+        throw new Error('В каталоге отсутствует принятая версия данных');
       }
       const catalogInstance = body.catalogInstance;
       if (!body.stale && !body.degraded && (typeof catalogInstance !== 'string' || !catalogInstance)) {
-        throw new Error('Radio directory omitted its catalog instance');
+        throw new Error('В каталоге отсутствует идентификатор экземпляра');
       }
       const preservingWarmCatalog = _stations.length > 0 && (body.stale || body.degraded);
       // Generations are only comparable within one producer instance. A new
@@ -2719,7 +2720,7 @@ export const radioLayer = {
         && !body.degraded
         && Number.isSafeInteger(currentAcceptedGeneration)
         && acceptedGeneration < currentAcceptedGeneration
-      ) throw new Error('Radio directory generation regressed');
+      ) throw new Error('Версия каталога радиостанций устарела');
       const repeatingAcceptedGeneration = (
         !body.stale
         && !body.degraded
@@ -2741,7 +2742,7 @@ export const radioLayer = {
             updatedAt,
             immutableRows,
           );
-          if (!acceptedSnapshot) throw new Error('Radio directory generation metadata was malformed');
+          if (!acceptedSnapshot) throw new Error('Некорректные данные версии каталога радиостанций');
           _acceptedCatalogSnapshot = acceptedSnapshot;
           reconcileStations(acceptedSnapshot.stations);
         } else {
@@ -2752,8 +2753,8 @@ export const radioLayer = {
       _degraded = body.degraded;
       _stale = body.stale;
       _error = preservingWarmCatalog
-        ? 'Directory refresh degraded; showing the previous station catalog.'
-        : (_degraded ? 'Radio directory coverage is degraded.' : null);
+        ? 'Обновление каталога прошло со сбоем. Показан прежний каталог станций.'
+        : (_degraded ? 'Каталог радиостанций загружен не полностью.' : null);
     } catch (error) {
       if (error?.name === 'AbortError' || !radioRequestIsCurrent(
         generation,
@@ -2763,8 +2764,8 @@ export const radioLayer = {
         _sessionGeneration,
       )) return;
       _error = _stations.length
-        ? 'Directory refresh failed; showing the previous station catalog.'
-        : 'Radio directory is temporarily unavailable.';
+        ? 'Не удалось обновить каталог. Показан прежний каталог станций.'
+        : 'Каталог радиостанций временно недоступен.';
       _stale = _stations.length > 0;
       _degraded = _stations.length > 0;
     } finally {

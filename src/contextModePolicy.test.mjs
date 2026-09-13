@@ -91,7 +91,7 @@ test('user-facing Context actions surface rejection and semantic false without r
     onFailure: (error) => surfaced.push(error),
   }), false);
   assert.equal(surfaced[0], rejection);
-  assert.match(surfaced[1].message, /did not complete/);
+  assert.equal(surfaced[1].message, 'Не удалось переключить режим обстановки');
 
   assert.equal(await settleUserFacingContextAction({
     operation: async () => false,

@@ -14,7 +14,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-import { SceneDirector } from './director.js';
+import {
+  SceneDirector,
+  sceneDetectionDisplayName,
+  sceneStyleDisplayName,
+} from './director.js';
 import { SCENE_TRACKING_PARAM_KEYS } from './scenePolicy.js';
 import { SCENE_RECIPES } from './recipes.js';
 
@@ -28,6 +32,14 @@ const REGISTERED = [
 
 /** Layers Space Missions permits while it isolates the globe (contextModePolicy). */
 const SPACE_MISSIONS_ALLOWED = new Set(['rocket-launches', 'satellites', 'radio']);
+
+test('scene metadata translates persisted style and detection IDs for display only', () => {
+  assert.equal(sceneStyleDisplayName('retro'), 'РЕТРО');
+  assert.equal(sceneStyleDisplayName('surveillance'), 'НОЧНОЕ ВИДЕНИЕ');
+  assert.equal(sceneDetectionDisplayName('OFF'), 'ВЫКЛ');
+  assert.equal(sceneDetectionDisplayName('NORMAL'), 'СБАЛАНСИРОВАННО');
+  assert.equal(sceneDetectionDisplayName('unexpected'), 'НЕИЗВЕСТНО');
+});
 
 const PROJECT_FIXTURE = {
   version: 3,

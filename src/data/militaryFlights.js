@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { t } from '../i18n/index.js';
 import { aircraftIncludedInNearby } from './aircraftNearbyPolicy.js';
 import { registerPickOwner, unregisterPickOwner, isOwnedByOtherLayer, resolvePickId } from './pickRegistry.js';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
@@ -345,7 +346,7 @@ function _contextSubjectMetadata(icao24) {
   return {
     id: icao24,
     layerId: 'military',
-    layerName: 'Military Flights',
+    layerName: t('data.layer.militaryFlights'),
     source: 'adsb.lol',
     label,
     latitude: described.latitude,
@@ -360,15 +361,15 @@ function _contextSubjectMetadata(icao24) {
       // Converted contacts report their class as TR-3B — the same override
       // the readout and Contacts card show.
       type: tr3bTypeLabel(icao24, _toCleanText(info?.type) || ''),
-      altitude: described.onGround ? 'on ground' : _formatAltitude(info?.altitudeFt),
+      altitude: described.onGround ? 'на земле' : _formatAltitude(info?.altitudeFt),
       speed: Number.isFinite(described.velocityMps)
-        ? `${Math.round(described.velocityMps * 1.944)} kt`
+        ? `${Math.round(described.velocityMps * 1.944)} уз.`
         : '',
       heading: Number.isFinite(described.track) ? `${Math.round(described.track)}°` : '',
       icao24,
       // Honesty cue: the contact is coasting on dead reckoning, so the
       // narrated position/velocity are last-known rather than live.
-      status: described.stale ? 'stale (missed polls)' : 'live',
+      status: described.stale ? 'устарело, пропущены обновления' : 'в реальном времени',
     },
   };
 }
@@ -666,8 +667,8 @@ function _toCleanText(value) {
  * @returns {string} Formatted altitude string (e.g. "35000 ft" or "Alt unknown")
  */
 function _formatAltitude(altitudeFt) {
-  if (!Number.isFinite(altitudeFt)) return 'Alt unknown';
-  return `${Math.round(altitudeFt)} ft`;
+  if (!Number.isFinite(altitudeFt)) return 'высота неизвестна';
+  return `${Math.round(altitudeFt)} фт`;
 }
 
 /**
@@ -702,16 +703,16 @@ function _likelyLanded(icao24) {
  * @returns {string} Newline-separated label text
  */
 function _buildTrackedLabel(info, icao24) {
-  const stale = (_missingPolls.get(icao24) || _backoff) ? ' · STALE' : '';
+  const stale = (_missingPolls.get(icao24) || _backoff) ? ' · УСТАРЕЛО' : '';
   const callsign = (_toCleanText(info?.callsign) || _toCleanText(info?.registration) || icao24) + stale;
   // Converted contacts report their class as TR-3B — that override is exactly
   // what the Easter egg replaces the real type with.
-  const type = tr3bTypeLabel(icao24, _toCleanText(info?.type) || 'Type unknown');
-  const registration = _toCleanText(info?.registration) || 'Reg unknown';
-  const operator = _toCleanText(info?.operator) || 'Operator unknown';
+  const type = tr3bTypeLabel(icao24, _toCleanText(info?.type) || 'тип неизвестен');
+  const registration = _toCleanText(info?.registration) || 'регистрация неизвестна';
+  const operator = _toCleanText(info?.operator) || 'оператор неизвестен';
   const altitude = _formatAltitude(info?.altitudeFt);
   const speedKt = info?.speedMps ? Math.round(info.speedMps * 1.944) : null;
-  const tail = speedKt ? `${altitude} · ${speedKt} kt` : altitude;
+  const tail = speedKt ? `${altitude} · ${speedKt} уз` : altitude;
   return [
     callsign,
     `${type} · ${registration}`,
@@ -2601,7 +2602,7 @@ export function mapAnalystRecord(icao24, info) {
  */
 const militaryFlightsLayer = {
   id: 'military',
-  name: 'Military Flights',
+  name: t('data.layer.militaryFlights'),
   icon: '🎖️',
   source: 'adsb.lol',
   /** @type {number} Polling interval in ms between API fetches */
@@ -2795,7 +2796,7 @@ const militaryFlightsLayer = {
         // hammer the upstream and the UI reads honestly.
         if (response.status === 429) {
           _retryAt = nowMs + BACKOFF_INTERVAL;
-          _lastError = 'adsb.lol rate limited';
+          _lastError = 'adsb.lol ограничил частоту запросов';
           return;
         }
         _retryAt = nowMs + ERROR_BACKOFF_INTERVAL;
@@ -2817,7 +2818,7 @@ const militaryFlightsLayer = {
       if (!data || !Array.isArray(data.ac)) {
         _backoff = true;
         _retryAt = nowMs + ERROR_BACKOFF_INTERVAL;
-        _lastError = 'Malformed adsb.lol response';
+        _lastError = 'неверный ответ adsb.lol';
         return;
       }
 
@@ -2825,7 +2826,7 @@ const militaryFlightsLayer = {
       if (data.ac.length > 0 && usableAircraft.length === 0) {
         _backoff = true;
         _retryAt = nowMs + ERROR_BACKOFF_INTERVAL;
-        _lastError = 'Malformed adsb.lol aircraft rows';
+        _lastError = 'неверные записи о самолетах в ответе adsb.lol';
         return;
       }
 
@@ -3232,7 +3233,7 @@ const militaryFlightsLayer = {
       console.warn('[Data:Military] Fetch error:', e);
       _backoff = true;
       _retryAt = Date.now() + ERROR_BACKOFF_INTERVAL;
-      _lastError = 'adsb.lol network error';
+      _lastError = 'сетевая ошибка adsb.lol';
     } finally {
       _activeUpdateControllers.delete(resourceController);
     }

@@ -68,22 +68,22 @@ test('cockpit altitude reads zero on the ground without changing airborne MSL', 
 test('cockpit Context scope distinguishes radius-complete feeds from viewport installations', () => {
   assert.equal(
     formatCockpitContextScope('TEST123', 250000, 'CURRENT VIEWPORT ONLY'),
-    'TEST123 · 250 KM AIR/SEA WINDOW · INSTALLATIONS CURRENT VIEWPORT ONLY',
+    'TEST123 · 250 КМ · ЗОНА ВОЗДУХ/МОРЕ · ОБЪЕКТЫ: ТОЛЬКО ТЕКУЩАЯ ОБЛАСТЬ ЭКРАНА',
   );
   assert.equal(
     formatCockpitContextScope('TEST123', 250000),
-    'TEST123 · 250 KM AIR/SEA WINDOW',
+    'TEST123 · 250 КМ · ЗОНА ВОЗДУХ/МОРЕ',
   );
 });
 
 test('cockpit Context scope preserves zero and replaces missing values intentionally', () => {
   assert.equal(
     formatCockpitContextScope('', 0),
-    '— · 0 KM AIR/SEA WINDOW',
+    '— · 0 КМ · ЗОНА ВОЗДУХ/МОРЕ',
   );
   assert.equal(
     formatCockpitContextScope(undefined, Number.NaN, {}),
-    '— · — KM AIR/SEA WINDOW',
+    '— · — КМ · ЗОНА ВОЗДУХ/МОРЕ',
   );
 });
 
@@ -150,7 +150,7 @@ test('compass divisions remain ordered across north', () => {
 });
 
 test('compass labels use cardinals where exact and degrees elsewhere', () => {
-  assert.equal(formatCompassDivision(270), 'W');
+  assert.equal(formatCompassDivision(270), 'З');
   assert.equal(formatCompassDivision(30), '030');
 });
 

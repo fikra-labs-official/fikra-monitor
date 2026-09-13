@@ -24,10 +24,34 @@ import {
   shouldStopVoiceAfterRadioTool,
   readStoredVoiceTier,
   readStoredVoiceLimits,
+  responseInstructionForToolResult,
   writeStoredVoiceTier,
   writeStoredVoiceLimits,
+  userFacingRealtimeError,
 } from './gevRealtime.js';
 import { createVoiceCostTracker } from './voiceCost.js';
+
+test('Realtime provider errors are sanitized before reaching the Russian UI', () => {
+  assert.match(userFacingRealtimeError({ code: 'insufficient_quota', message: 'raw credit error' }, 429), /балансе OpenAI API нет средств/);
+  assert.match(userFacingRealtimeError({ code: 'invalid_api_key' }, 401), /Ключ OpenAI API недействителен/);
+  assert.match(userFacingRealtimeError({ type: 'rate_limit_error' }, 429), /Слишком много запросов/);
+  assert.equal(
+    userFacingRealtimeError({ message: 'provider-only English detail' }, 500),
+    'Не удалось подключиться к OpenAI Realtime: HTTP 500.',
+  );
+  assert.doesNotMatch(userFacingRealtimeError({ message: 'provider-only English detail' }), /provider-only English detail/);
+});
+
+test('pending administrative outline is never narrated as already visible', () => {
+  const instruction = responseInstructionForToolResult({
+    ok: true,
+    action: 'annotate_map',
+    outlinePending: true,
+  });
+  assert.match(instruction, /Only the anchor point is visible now/);
+  assert.match(instruction, /boundary is still being traced/);
+  assert.doesNotMatch(instruction, /now marked on the map/);
+});
 
 test('push-to-talk recognizes Space by code or key', () => {
   assert.equal(isPushToTalkKey({ code: 'Space', key: 'Unidentified' }), true);
@@ -57,12 +81,12 @@ test('mic clicks are ignored while Space is physically held', () => {
 test('voice control help tray reflects the push-to-talk key state', () => {
   assert.equal(
     resolveVoiceControlHint(false, false),
-    'Hold Space to speak · click mic to toggle voice',
+    'Удерживайте Space для речи · нажмите на микрофон, чтобы включить или выключить голос',
   );
-  assert.equal(resolveVoiceControlHint(true, true), 'Release Space to send');
+  assert.equal(resolveVoiceControlHint(true, true), 'Отпустите Space, чтобы отправить');
   assert.equal(
     resolveVoiceControlHint(true, false),
-    'Hold Space to speak · click mic to toggle voice',
+    'Удерживайте Space для речи · нажмите на микрофон, чтобы включить или выключить голос',
   );
 });
 
@@ -480,7 +504,7 @@ test('Radio handoff waits for response.done so later multi-intent tools execute 
     'tool:set_visual_style',
     'assistant-confirmation-requested',
   ]);
-  assert.match(confirmationInstructions[0], /Turning on the radio/);
+  assert.match(confirmationInstructions[0], /Включаю радио/);
 
   await controller.handleRealtimeEvent(event({ type: 'response.created', response: { id: 'response-confirm' } }));
   await controller.handleRealtimeEvent(event({
@@ -551,7 +575,7 @@ test('Radio playback failure leaves voice connected and speaks a correction', as
   assert.equal(controller.dc?.readyState, 'open');
   assert.ok(sent.some((message) => (
     message.type === 'response.create'
-    && message.response?.instructions?.includes('Voice is still on')
+    && message.response?.instructions?.includes('Голосовой режим остался включён')
   )));
 });
 
@@ -2591,22 +2615,22 @@ test('voice tier round-trips through storage', () => {
   assert.equal(readStoredVoiceTier(storage), 'standard');
 });
 
-test('an unset or hand-edited tier reads back as standard', () => {
-  assert.equal(readStoredVoiceTier(fakeVoiceStorage()), 'standard');
+test('an unset or hand-edited tier reads back as mini', () => {
+  assert.equal(readStoredVoiceTier(fakeVoiceStorage()), 'mini');
   assert.equal(
-    readStoredVoiceTier(fakeVoiceStorage({ 'godsEyeView.voiceCost.tier': 'gpt-4o' })),
-    'standard'
+    readStoredVoiceTier(fakeVoiceStorage({ 'godsEyeView.voiceCost.tier.v2': 'gpt-4o' })),
+    'mini'
   );
   assert.equal(
-    readStoredVoiceTier(fakeVoiceStorage({ 'godsEyeView.voiceCost.tier': '__proto__' })),
-    'standard'
+    readStoredVoiceTier(fakeVoiceStorage({ 'godsEyeView.voiceCost.tier.v2': '__proto__' })),
+    'mini'
   );
 });
 
 test('writing a bogus tier persists the safe fallback, not the bogus value', () => {
   const storage = fakeVoiceStorage();
-  assert.equal(writeStoredVoiceTier('turbo', storage), 'standard');
-  assert.equal(storage.dump()['godsEyeView.voiceCost.tier'], 'standard');
+  assert.equal(writeStoredVoiceTier('turbo', storage), 'mini');
+  assert.equal(storage.dump()['godsEyeView.voiceCost.tier.v2'], 'mini');
 });
 
 test('a storage that throws never breaks the mic', () => {
@@ -2618,7 +2642,7 @@ test('a storage that throws never breaks the mic', () => {
       throw new Error('SecurityError');
     },
   };
-  assert.equal(readStoredVoiceTier(hostile), 'standard');
+  assert.equal(readStoredVoiceTier(hostile), 'mini');
   assert.equal(writeStoredVoiceTier('mini', hostile), 'mini');
   assert.deepEqual(readStoredVoiceLimits(hostile), { warnUsd: 2, capUsd: 5 });
 });
@@ -2763,11 +2787,11 @@ test('F1: the cap still fires after a mid-session toggle, at the original rates'
 test('F1: the toggle still records the next-session preference while live', () => {
   const { controller, ui } = costControllerHarness();
   controller.status = 'listening';
-  controller.setVoiceTier('mini');
-  assert.equal(controller.voiceTier, 'mini');
-  assert.equal(ui.tierButton.textContent, 'MINI');
+  controller.setVoiceTier('standard');
+  assert.equal(controller.voiceTier, 'standard');
+  assert.equal(ui.tierButton.textContent, 'СТД');
   // ...and says so, rather than implying the live session switched.
-  assert.match(ui.tierButton.title, /this session stays on/i);
+  assert.match(ui.tierButton.title, /Текущая сессия останется на/i);
 });
 
 test('F1: when idle, toggling does re-price the preview meter', () => {
@@ -2893,7 +2917,7 @@ test('F5: a response in flight at teardown marks the accounting INCOMPLETE', () 
   const state = controller.costTracker.state();
   assert.equal(state.incomplete, true);
   assert.equal(state.display, '~$1.00*', 'see-note mark, not a direction claim');
-  assert.match(state.note, /incomplete/i, 'the tooltip explains why');
+  assert.match(state.note, /неполн/i, 'the tooltip explains why');
   assert.doesNotMatch(state.note, /at least|lower bound|floor/i, 'no floor claim');
 });
 
@@ -2971,7 +2995,7 @@ test('F4: two clicks during a live session return to the original preference', (
 
   controller.toggleVoiceTier();
   assert.equal(controller.voiceTier, 'standard', 'second click switches back');
-  assert.equal(ui.tierButton.textContent, 'STD');
+  assert.equal(ui.tierButton.textContent, 'СТД');
 });
 
 test('F4: the toggle alternates across many clicks mid-session', () => {
@@ -3122,6 +3146,22 @@ test('a typed command supersedes the old response, so its late tools never fire'
   );
 });
 
+test('speech barge-in supersedes the active response, so its late tools never fire', async () => {
+  const { controller, sent, dispatched } = toolDispatchController();
+  controller.updateResponseState({ type: 'response.created', response: { id: 'resp_old' } });
+
+  await controller.handleRealtimeEvent({
+    data: JSON.stringify({ type: 'input_audio_buffer.speech_started' }),
+  });
+  assert.equal(controller.userTurnPending, true);
+  assert.equal(controller.isSupersededResponse('resp_old'), true);
+  assert.deepEqual(sent, [], 'server VAD owns response cancellation over WebRTC');
+
+  await controller.handleRealtimeEvent(lateToolEvent('resp_old', 'call_stale'));
+  assert.deepEqual(dispatched, [], 'an interrupted answer cannot mutate the map');
+  assert.deepEqual(sent, ['client.function_call_output']);
+});
+
 test('a typed command drops the old response’s queued follow-up confirmation', () => {
   const { controller, sent } = textCommandController();
   controller.setVoiceSpeaker = () => {};
@@ -3195,7 +3235,7 @@ test('a refused superseded call is still answered with a terminal output', async
   assert.equal(outputs[0].result.ok, false);
   assert.equal(outputs[0].result.superseded, true);
   assert.equal(outputs[0].result.action, 'fly_to_location');
-  assert.ok(/superseded/i.test(outputs[0].result.error), 'and it says plainly why');
+  assert.ok(/заменила более новая/i.test(outputs[0].result.error), 'and it says plainly why');
   assert.equal(
     sent.filter((label) => label === 'client.response_create.tool_followup').length,
     0,

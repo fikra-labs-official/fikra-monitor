@@ -141,7 +141,7 @@ test('nonempty adsb.lol payload with zero usable rows cannot prove share target 
     await militaryFlightsLayer.update({ camera: { positionCartographic: null }, scene: {} });
     const resolution = await militaryFlightsLayer.resolveTrackingRestoreTarget('ae1234');
     assert.equal(resolution.status, 'source-unavailable');
-    assert.match(militaryFlightsLayer.getStats().error, /Malformed adsb\.lol aircraft rows/);
+    assert.match(militaryFlightsLayer.getStats().error, /неверные записи о самолетах в ответе adsb\.lol/);
     assert.equal(militaryFlightsLayer.getAnalystRecords().length, 1, 'warm aircraft data is preserved');
   } finally {
     globalThis.fetch = realFetch;
@@ -209,11 +209,11 @@ test('military poll refreshes tracked callsign/altitude/kts and marks a missed p
   try {
     await militaryFlightsLayer.update(viewer);
     assert.equal(entity.gevLabelModel.title, 'RCH451');
-    assert.match(entity.gevLabelModel.details.join(' · '), /28000 ft/);
-    assert.match(entity.gevLabelModel.details.join(' · '), /400 kt/);
+    assert.match(entity.gevLabelModel.details.join(' · '), /28000 фт/);
+    assert.match(entity.gevLabelModel.details.join(' · '), /400 уз/);
 
     await militaryFlightsLayer.update(viewer);
-    assert.match(entity.gevLabelModel.title, /STALE/);
+    assert.match(entity.gevLabelModel.title, /УСТАРЕЛО/);
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -318,7 +318,7 @@ test('real military track path creates no native label and publishes every cache
       title: 'RCH451',
       details: [
         'C17 · 05-8152',
-        'United States Air Force · 28000 ft · 450 kt',
+        'United States Air Force · 28000 фт · 450 уз',
       ],
       accent: '#ffd166',
     });

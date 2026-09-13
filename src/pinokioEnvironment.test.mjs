@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseEnv } from 'node:util';
 import {
   applyPinokioEnvironment,
+  ensurePinokioSharingBoundary,
   readPinokioEnvironment,
 } from '../scripts/pinokio-environment.mjs';
 
@@ -19,6 +20,7 @@ function encodeUtf16be(source) {
 
 const PROVIDER_FIELDS = [
   'GOOGLE_MAPS_API_KEY',
+  'GOOGLE_MAPS_SERVER_API_KEY',
   'CESIUM_ION_TOKEN',
   'OPENAI_API_KEY',
   'AISSTREAM_API_KEY',
@@ -206,3 +208,70 @@ for (const fixture of [
     }
   });
 }
+
+test('missing Pinokio store is born atomically with owner-only permissions', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'gev-pinokio-env-new-'));
+  try {
+    const filepath = path.join(root, 'ENVIRONMENT');
+    const configured = ensurePinokioSharingBoundary(filepath);
+    assert.equal(configured.PINOKIO_SHARE_VAR, '__gev_sharing_disabled__');
+    if (process.platform !== 'win32') assert.equal(statSync(filepath).mode & 0o777, 0o600);
+    assert.deepEqual(readdirSync(root), ['ENVIRONMENT']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('existing permissive Pinokio store becomes owner-only even when no rewrite is needed', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'gev-pinokio-env-mode-'));
+  try {
+    const filepath = path.join(root, 'ENVIRONMENT');
+    writeFileSync(filepath, 'OPENAI_API_KEY=synthetic\n', { mode: 0o644 });
+    ensurePinokioSharingBoundary(filepath);
+    const stable = readFileSync(filepath);
+    if (process.platform !== 'win32') {
+      assert.equal(statSync(filepath).mode & 0o777, 0o600);
+      // The second pass has identical bytes, so it tests hardening without a rename.
+      chmodSync(filepath, 0o644);
+      ensurePinokioSharingBoundary(filepath);
+      assert.equal(statSync(filepath).mode & 0o777, 0o600);
+      assert.deepEqual(readFileSync(filepath), stable);
+    }
+    assert.deepEqual(readdirSync(root), ['ENVIRONMENT']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('symlink store is refused without modifying its target', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'gev-pinokio-env-link-'));
+  try {
+    const target = path.join(root, 'target');
+    const filepath = path.join(root, 'ENVIRONMENT');
+    const original = 'OPENAI_API_KEY=synthetic\n';
+    writeFileSync(target, original, { mode: 0o644 });
+    symlinkSync(target, filepath);
+    assert.throws(() => ensurePinokioSharingBoundary(filepath), /regular file, not a link/);
+    assert.equal(readFileSync(target, 'utf8'), original);
+    if (process.platform !== 'win32') assert.equal(statSync(target).mode & 0o777, 0o644);
+    assert.deepEqual(readdirSync(root).sort(), ['ENVIRONMENT', 'target']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('symlink configuration directory is refused without a write through it', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'gev-pinokio-dir-link-'));
+  try {
+    const target = path.join(root, 'target');
+    mkdirSync(target);
+    const original = 'OPENAI_API_KEY=synthetic\n';
+    writeFileSync(path.join(target, 'ENVIRONMENT'), original);
+    const alias = path.join(root, 'alias');
+    symlinkSync(target, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.throws(() => ensurePinokioSharingBoundary(path.join(alias, 'ENVIRONMENT')), /real directory/);
+    assert.equal(readFileSync(path.join(target, 'ENVIRONMENT'), 'utf8'), original);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

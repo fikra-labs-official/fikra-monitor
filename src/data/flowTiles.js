@@ -110,18 +110,20 @@ function cacheSet(key, entry) {
  *
  * Tiles are fetched from the local proxy in parallel; each decoded tile is
  * cached in memory for 120 s (keyed z/x/y), so repeat calls for the same
- * viewport are free. Partial tile failures return the segments that DID
- * decode (last-good philosophy); the promise rejects only when every tile
- * failed (e.g. keyless 503, aborted signal, proxy down).
+ * viewport are free. By default, partial tile failures return the segments
+ * that DID decode (last-good philosophy); requireComplete rejects partial
+ * coverage so a caller cannot label it as a complete live viewport.
  *
  * @param {{south:number, west:number, north:number, east:number}} bounds - Degrees.
  * @param {Object} [opts]
  * @param {AbortSignal} [opts.signal] - Abort signal (camera moved / layer disabled).
  * @param {number} [opts.zoom=12] - Flow tile zoom level.
+ * @param {boolean} [opts.requireComplete=false] - Reject partial coverage when
+ *   the caller needs to represent the whole viewport as live TomTom geometry.
  * @returns {Promise<Array<{coords:number[][], trafficLevel:number, roadType:string, closure:boolean}>>}
  *   Flat array of flow segments across all covering tiles.
  */
-export async function fetchFlowForBounds(bounds, { signal, zoom = 12 } = {}) {
+export async function fetchFlowForBounds(bounds, { signal, zoom = 12, requireComplete = false } = {}) {
   const tiles = tilesForBounds(bounds, zoom);
   if (tiles.length === 0) return [];
   const now = Date.now();
@@ -140,8 +142,9 @@ export async function fetchFlowForBounds(bounds, { signal, zoom = 12 } = {}) {
   }));
 
   const fulfilled = results.filter((r) => r.status === 'fulfilled');
-  if (fulfilled.length === 0) {
-    throw results[0].reason instanceof Error ? results[0].reason : new Error('flow fetch failed');
+  if (fulfilled.length === 0 || (requireComplete && fulfilled.length !== results.length)) {
+    const failure = results.find((r) => r.status === 'rejected')?.reason;
+    throw failure instanceof Error ? failure : new Error('flow fetch failed');
   }
   return fulfilled.flatMap((r) => r.value);
 }

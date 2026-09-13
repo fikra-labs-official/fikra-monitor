@@ -656,7 +656,7 @@ test('a keyless environment opens nothing and terminates anything held', async (
   assert.equal(context.transport.created.length, 1, 'no sockets while keyless');
 });
 
-test('a socket without ws emitter semantics is rejected, not silently mis-read', () => {
+test('a socket without необходимый интерфейс соединения is rejected, not silently mis-read', () => {
   const time = fakeClock();
   const adapter = createAisStreamAdapter({
     // A built-in-WebSocket-shaped object: addEventListener only, no terminate.
@@ -670,7 +670,7 @@ test('a socket without ws emitter semantics is rejected, not silently mis-read',
 
   adapter.ensure(ENV);
   assert.equal(adapter.snapshot().status, 'reconnecting');
-  assert.match(adapter.snapshot().error, /ws emitter semantics/);
+  assert.match(adapter.snapshot().error, /необходимый интерфейс соединения/);
   assert.equal(adapter.debug().liveSockets, 0, 'the unusable socket is not retained');
 });
 

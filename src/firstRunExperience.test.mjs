@@ -490,10 +490,10 @@ test('a failed Context mission reports the layers the facade named', async () =>
 });
 
 test('the fires/quakes tile name is switchable from one constant', () => {
-  assert.equal(environmentalLabel('ENVIRONMENTAL').title, 'ENVIRONMENTAL');
-  assert.equal(environmentalLabel('EARTH_WATCH').title, 'EARTH WATCH');
-  assert.equal(environmentalLabel('ACTIVE_EVENTS').title, 'ACTIVE EVENTS');
-  assert.equal(environmentalLabel('nonsense').title, 'ENVIRONMENTAL');
+  assert.equal(environmentalLabel('ENVIRONMENTAL').title, 'ПРИРОДНЫЕ ЯВЛЕНИЯ');
+  assert.equal(environmentalLabel('EARTH_WATCH').title, 'НАБЛЮДЕНИЕ ЗА ЗЕМЛЁЙ');
+  assert.equal(environmentalLabel('ACTIVE_EVENTS').title, 'АКТИВНЫЕ СОБЫТИЯ');
+  assert.equal(environmentalLabel('nonsense').title, 'ПРИРОДНЫЕ ЯВЛЕНИЯ');
   assert.equal(environmentalLabel().title, environmentalLabel(ENVIRONMENTAL_LABEL_CHOICE).title);
 });
 
@@ -559,16 +559,15 @@ test('markup, startup ordering and accessibility remain pinned', () => {
   // text counts; the comment beside it naturally says the words too.
   const envTile = html.slice(html.indexOf('data-first-run-choice="environmental"'));
   const visible = envTile.slice(envTile.indexOf('<small>'), envTile.indexOf('</small>'));
-  assert.match(visible, /earthquakes/i);
-  assert.match(visible, /fires?/i, 'the tile must promise the fires it enables');
+  assert.match(visible, /землетрясения/i);
+  assert.match(visible, /пожары/i, 'the tile must promise the fires it enables');
 
-  // The card's one persuasive line is OWNER-AUTHORED and pinned verbatim,
-  // unspaced em dash included. This is copy, not prose to be improved in a
-  // passing edit — changing it needs the owner, not a nicer-sounding rewrite.
+  // The localized first-run line remains pinned so a passing markup edit cannot
+  // silently restore the English source copy.
   assert.ok(
-    html.includes('<p id="first-run-description">It feels like a forbidden cockpit'
-      + '—then you realize the sources are public and the data is real.</p>'),
-    'the owner-authored first-run line must ship exactly as written',
+    html.includes('<p id="first-run-description">Сначала кажется, что вы попали в закрытую кабину. '
+      + 'Но источники открыты, а данные реальны.</p>'),
+    'the localized first-run line must ship exactly as written',
   );
 
   // Menu order is the owner's, read straight off the markup.
@@ -646,28 +645,25 @@ test('the DISPLAY rail starts collapsed on a first run, and a stored choice wins
   );
 });
 
-// ── Voice: instruction-only, tool schema byte-unchanged ─────────────────────
+// ── Voice: reviewed tool schema plus instruction-only named views ───────────
 
-test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is instructions only', () => {
+test('the voice tool schema keeps the reviewed bulk-search and admin-boundary baseline', () => {
   const src = fs.readFileSync(new URL('../vite.config.js', import.meta.url), 'utf8');
   const start = src.indexOf('const GEV_REALTIME_TOOLS = [');
   assert.ok(start > 0, 'GEV_REALTIME_TOOLS must still be a single literal array');
   const end = src.indexOf('\n];\n', start);
   const block = src.slice(start, end + 4);
 
-  // Re-pinned 2026-08-28: the Provider Settings / Esri release DELIBERATELY
-  // extends set_map_stack's enum with 'esri-imagery' (a real new basemap —
-  // exactly the kind of schema change this pin exists to make loud). The
-  // guarded claim is unchanged: first-run missions ride existing tools, and
-  // any NEW drift from this recorded schema still fails here.
-  assert.equal(block.length, 31189, 'tool schema byte length drifted from the pinned release schema');
+  // v0.1.1 adds the real esri-imagery basemap alongside Fikra's bulk search/admin boundaries.
+  assert.equal(block.length, 32537, 'tool schema byte length drifted from the reviewed baseline');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    '73aaabdb169a5478893d28688f327a21edd32ed3ec16fc6287bd944ed77beecf',
-    'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
+    '8f6cdddd0c79f3d27a28ff4a9d214a8b66d7dd134af69ac69329196ff16885f0',
+    'the reviewed Realtime tool schema drifted',
   );
 
-  // ...and the mapping that makes them reachable by voice is one instruction
+  // Named first-run views still ride existing tools. The mapping that makes
+  // them reachable by voice is one instruction
   // string, whose rollback is deleting that string. Anchored to a LIVE array
   // entry — a quote at the start of its own line — so commenting the paragraph
   // out reads as the removal it is, not as a passing substring match.

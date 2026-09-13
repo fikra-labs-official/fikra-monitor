@@ -25,8 +25,8 @@
  * ⚠️ VERIFY AT RELEASE — MODEL IDS AND PRICES ARE EXTERNAL FACTS THAT DRIFT. ⚠️
  *
  * Both model ids and every rate below were read from OpenAI's own model +
- * pricing pages on 2026-08-18:
- *   - https://developers.openai.com/api/docs/models/gpt-realtime-2
+ * pricing pages on 2026-08-29:
+ *   - https://developers.openai.com/api/docs/models/gpt-realtime-2.1
  *   - https://developers.openai.com/api/docs/models/gpt-realtime-2.1-mini
  *   - https://developers.openai.com/api/docs/pricing
  *
@@ -42,16 +42,16 @@
  *
  * Rates are USD per 1,000,000 tokens.
  */
-export const VOICE_MODEL_RATES_VERIFIED_ON = '2026-08-18';
+export const VOICE_MODEL_RATES_VERIFIED_ON = '2026-09-13';
 
 /** @typedef {'standard'|'mini'} VoiceModelTier */
 
 export const VOICE_MODELS = Object.freeze({
   standard: Object.freeze({
     tier: 'standard',
-    id: 'gpt-realtime-2',
-    label: 'STANDARD',
-    /** USD per 1M tokens — gpt-realtime-2. */
+    id: 'gpt-realtime-2.1',
+    label: 'СТАНДАРТ',
+    /** USD per 1M tokens — gpt-realtime-2.1. */
     rates: Object.freeze({
       textInput: 4,
       textCachedInput: 0.4,
@@ -66,7 +66,7 @@ export const VOICE_MODELS = Object.freeze({
   mini: Object.freeze({
     tier: 'mini',
     id: 'gpt-realtime-2.1-mini',
-    label: 'MINI',
+    label: 'МИНИ',
     /** USD per 1M tokens — gpt-realtime-2.1-mini (~3.2× cheaper on audio). */
     rates: Object.freeze({
       textInput: 0.6,
@@ -81,14 +81,14 @@ export const VOICE_MODELS = Object.freeze({
   }),
 });
 
-/** The tier used when nothing (or nonsense) was requested. */
-export const DEFAULT_VOICE_TIER = 'standard';
+/** The cost-efficient tier used when nothing (or nonsense) was requested. */
+export const DEFAULT_VOICE_TIER = 'mini';
 
 /** Every tier name the UI and the token endpoint accept. */
 export const VOICE_TIERS = Object.freeze(Object.keys(VOICE_MODELS));
 
 /**
- * Map a requested tier name to its model entry, falling back to `standard`.
+ * Map a requested tier name to its model entry, falling back to the configured default.
  *
  * Deliberately total: an unknown, empty, non-string, or hostile value resolves
  * to the default rather than throwing, so a bad querystring degrades to the
@@ -410,7 +410,7 @@ export function createVoiceCostTracker(options = {}) {
     display: formatCostUsd(totalUsd) + (incomplete ? '*' : ''),
     /** Prose for the tooltip; null when the accounting is complete. */
     note: incomplete
-      ? 'Estimate is incomplete — a response was still in flight when the session ended, so its usage was never reported.'
+      ? 'Оценка неполная. При завершении сессии ответ ещё формировался, поэтому данные о расходе не поступили.'
       : null,
   });
 

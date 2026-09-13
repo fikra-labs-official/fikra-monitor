@@ -1,5 +1,6 @@
 import { governorRequestRender } from '../renderGovernor.js';
 import { markDetectionSourcesChanged } from './detection.js';
+import { t } from '../i18n/index.js';
 function cloneLayerParams(value) {
   if (Array.isArray(value)) return value.map(cloneLayerParams);
   if (value && typeof value === 'object') {
@@ -11,12 +12,12 @@ function cloneLayerParams(value) {
 }
 
 const FEED_STATE_LABELS = Object.freeze({
-  nominal: 'ON',
-  loading: 'LOADING',
-  degraded: 'DEGRADED',
-  stale: 'STALE',
-  fallback: 'FALLBACK',
-  unavailable: 'UNAVAILABLE',
+  nominal: 'ВКЛ',
+  loading: 'ЗАГРУЗКА',
+  degraded: 'СБОЙ',
+  stale: 'УСТАРЕЛО',
+  fallback: 'РЕЗЕРВ',
+  unavailable: 'НЕДОСТУПНО',
 });
 
 const SUPERSEDED_VISIBILITY_INTENT = Symbol('superseded-visibility-intent');
@@ -2214,23 +2215,23 @@ export class DataLayerManager {
     const source = stats.source || layer.source;
     const lifecycleState = layer.lifecycleState || (layer.enabled ? 'enabled' : 'disabled');
     if (lifecycleState === 'enabling' || lifecycleState === 'disabling') {
-      return `${lifecycleState.toUpperCase()} · ${source}`;
+      return `${lifecycleState === 'enabling' ? 'ВКЛЮЧЕНИЕ' : 'ВЫКЛЮЧЕНИЕ'} · ${source}`;
     }
     if (layer.lifecycleUncertain) {
-      return `UNCERTAIN · ${source} · lifecycle state requires reconciliation`;
+      return `СОСТОЯНИЕ НЕЯСНО · ${source} · требуется синхронизация`;
     }
     const presentedError = stats.error || stats.lastError || stats.managerRefreshError;
     if (presentedError) {
       if (typeof stats.retryInSec === 'number' && stats.retryInSec > 0) {
-        return `${stateLabel} · ${source} · ${presentedError} · retry ${stats.retryInSec}s`;
+        return `${stateLabel} · ${source} · ${presentedError} · повтор через ${stats.retryInSec} с`;
       }
       return `${stateLabel} · ${source} · ${presentedError}`;
     }
-    const ago = stats.lastUpdate ? this._timeAgo(stats.lastUpdate) : 'never';
+    const ago = stats.lastUpdate ? this._timeAgo(stats.lastUpdate) : 'нет данных';
     if (stats.loading) {
       const loadingLabel = typeof stats.loadingLabel === 'string' && stats.loadingLabel.trim()
         ? stats.loadingLabel.trim()
-        : 'loading...';
+        : t('data.common.loading');
       return `${source} · ${loadingLabel}`;
     }
     if (feedState === 'fallback') {
@@ -2241,7 +2242,7 @@ export class DataLayerManager {
     }
     if (feedState === 'stale') {
       const retry = typeof stats.retryInSec === 'number' && stats.retryInSec > 0
-        ? ` · retrying in ${stats.retryInSec}s`
+        ? ` · повтор через ${stats.retryInSec} с`
         : '';
       return `${stateLabel} · ${source} · ${ago}${retry}`;
     }
@@ -2268,8 +2269,8 @@ export class DataLayerManager {
       : (uncertain ? 'uncertain' : feedState);
     button.disabled = transitioning;
     button.textContent = transitioning
-      ? layer.lifecycleState.toUpperCase()
-      : (uncertain ? 'UNCERTAIN' : (layer.enabled ? FEED_STATE_LABELS[feedState] : 'OFF'));
+      ? (layer.lifecycleState === 'enabling' ? 'ВКЛЮЧЕНИЕ' : 'ВЫКЛЮЧЕНИЕ')
+      : (uncertain ? 'НЕЯСНО' : (layer.enabled ? FEED_STATE_LABELS[feedState] : 'ВЫКЛ'));
     button.setAttribute('aria-label', `${layer.name}: ${button.textContent}`);
   }
 
@@ -2280,9 +2281,9 @@ export class DataLayerManager {
 
   _timeAgo(timestamp) {
     const diff = Math.floor((Date.now() - timestamp) / 1000);
-    if (diff < 5) return 'just now';
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 5) return 'только что';
+    if (diff < 60) return `${diff} с назад`;
+    if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`;
+    return `${Math.floor(diff / 3600)} ч назад`;
   }
 }

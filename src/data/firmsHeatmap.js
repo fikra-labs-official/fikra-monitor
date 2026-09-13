@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { pluralRu, t } from '../i18n/index.js';
 import { governorRequestRender } from '../renderGovernor.js';
 import {
   registerSpriteCollection,
@@ -301,18 +302,18 @@ export function createFirmsHeatmapLayer({
      */
     getStats() {
       const now = Date.now();
-      const staleText = _lastUpdate ? `STALE · cached ${formatAge(now - _lastUpdate) || '<1h'}` : 'STALE';
+      const staleText = _lastUpdate ? `УСТАРЕЛО · кэш ${formatAge(now - _lastUpdate) || '<1 ч'}` : 'УСТАРЕЛО';
       let loadingLabel = '';
       if (_loading) {
-        loadingLabel = _fires.length ? 'refreshing...' : 'loading...';
+        loadingLabel = _fires.length ? t('data.common.refreshing') : t('data.common.loading');
       } else if (_keyRequired) {
-        loadingLabel = 'KEY REQUIRED';
+        loadingLabel = 'НУЖЕН КЛЮЧ';
       } else if (_stale) {
         loadingLabel = staleText;
       } else if (_error) {
         loadingLabel = _error;
       } else if (_lastUpdate) {
-        loadingLabel = `LIVE · updated ${formatAgoMinutes(now - _lastUpdate)}`;
+        loadingLabel = `ПРЯМОЙ ПОТОК · обновлено ${formatAgoMinutes(now - _lastUpdate)}`;
       }
       return {
         count: _count,
@@ -320,7 +321,8 @@ export function createFirmsHeatmapLayer({
         lastUpdate: _lastUpdate,
         loading: _loading,
         stale: _stale,
-        error: _keyRequired ? 'KEY REQUIRED' : (_stale ? staleText : _error),
+        keyRequired: _keyRequired,
+        error: _keyRequired ? 'НУЖЕН КЛЮЧ' : (_stale ? staleText : _error),
         loadingLabel,
       };
     },
@@ -337,7 +339,7 @@ export function createFirmsHeatmapLayer({
         latitude: strongest.lat,
         longitude: strongest.lon,
         frp: strongest.frp,
-        label: `Fire · FRP ${formatFrp(strongest.frp)} MW`,
+        label: `Пожар · FRP ${formatFrp(strongest.frp)} МВт`,
       };
     },
 
@@ -465,7 +467,7 @@ export function createFirmsHeatmapLayer({
       if (reselected) selectFire(reselected);
     } catch (error) {
       console.warn(`[Data:${id}] FIRMS live load failed:`, error);
-      _error = 'live feed unavailable';
+      _error = 'прямой поток недоступен';
     } finally {
       _loading = false;
     }
@@ -796,7 +798,7 @@ export function createFirmsHeatmapLayer({
         if (!card.interactive) return card;
         return {
           ...card,
-          accessibilityLabel: `Focus fire detection ${card.title}, ${card.details.join(', ')}`,
+          accessibilityLabel: `Перейти к очагу пожара: ${card.title}, ${card.details.join(', ')}`,
           activate: () => {
             const fire = _fireByCardId.get(card.id);
             if (!fire) return false;
@@ -860,7 +862,7 @@ export function createFirmsHeatmapLayer({
     requestWorldFocus({
       kind: 'fire',
       id: fireDetectionKey(fire),
-      label: 'FIRE',
+      label: 'ПОЖАР',
       position: firePosition(fire),
     });
   }
@@ -986,14 +988,14 @@ export function createFirmsHeatmapLayer({
       layerName: name,
       source: 'NASA FIRMS',
       dataSource: _dataSource,
-      label: `Fire · FRP ${formatFrp(fire.frp)} MW`,
+      label: `Пожар · FRP ${formatFrp(fire.frp)} МВт`,
       latitude: fire.lat,
       longitude: fire.lon,
       properties: {
         frp: fire.frp,
         confidence: confidenceBucket(fire.confidence),
-        age: fire.acqMs > 0 ? formatAge(Date.now() - fire.acqMs) : 'unknown',
-        sensor: fire.sensor || 'unknown',
+        age: fire.acqMs > 0 ? formatAge(Date.now() - fire.acqMs) : 'неизвестно',
+        sensor: fire.sensor || 'неизвестно',
       },
     });
     return recordId;
@@ -1446,7 +1448,7 @@ export function buildSelectedFireCard(fire, nowMs) {
     if (age) meta.push(`${age} ago`);
   }
   const sat = satelliteShortName(fire.satellite);
-  meta.push(sat ? `${fire.sensor || 'VIIRS'} ${sat}` : (fire.sensor || 'sensor n/a'));
+  meta.push(sat ? `${fire.sensor || 'VIIRS'} ${sat}` : (fire.sensor || 'датчик не указан'));
   return {
     id: `selected-fire:${fireDetectionKey(fire)}`,
     actionable: true,
@@ -1455,10 +1457,10 @@ export function buildSelectedFireCard(fire, nowMs) {
     cullPosition: fireCullPosition(fire),
     gapPx: frpPixelSize(fire.frp),
     accent: accentForSeverity(detectionColorStop(fire).name),
-    title: `FIRE · ${formatFrp(fire.frp)} MW`,
+    title: `ПОЖАР · ${formatFrp(fire.frp)} МВт`,
     details: [
       meta.join(' · '),
-      formatLatLon(fire.lat, fire.lon) + (fire.night ? ' · NIGHT' : ''),
+      formatLatLon(fire.lat, fire.lon) + (fire.night ? ' · НОЧЬ' : ''),
     ],
     selected: true,
     priority: Number.MAX_SAFE_INTEGER,
@@ -1490,7 +1492,7 @@ export function buildFireCard(candidate, nowMs) {
     cullPosition: candidate.cullPosition || candidate.position,
     gapPx: frpPixelSize(fire.frp),
     accent: accentForSeverity(detectionColorStop(fire).name),
-    title: `▲ ${formatFrp(fire.frp)} MW`,
+    title: `▲ ${formatFrp(fire.frp)} МВт`,
     details: [meta.join(' · ')],
     selected: false,
     priority: Number(fire.frp) || 0,
@@ -1507,11 +1509,11 @@ export function buildFireCard(candidate, nowMs) {
  */
 export function buildCellCard(candidate, nowMs) {
   const cell = candidate.cell;
-  const noun = cell.count === 1 ? 'FIRE' : 'FIRES';
-  const parts = [`max ${formatFrp(cell.maxFrp)} MW`];
+  const noun = pluralRu(cell.count, ['ПОЖАР', 'ПОЖАРА', 'ПОЖАРОВ']);
+  const parts = [`макс. ${formatFrp(cell.maxFrp)} МВт`];
   if (cell.newestAcqMs > 0) {
     const age = formatAge(nowMs - cell.newestAcqMs);
-    if (age) parts.push(`new ${age}`);
+    if (age) parts.push(`обнаружен ${age} назад`);
   }
   return {
     id: `cell:${cell.latCell ?? 'x'}:${cell.lonCell ?? 'x'}`,
@@ -1585,18 +1587,18 @@ function formatFrp(frp) {
 function formatAge(deltaMs) {
   if (!Number.isFinite(deltaMs) || deltaMs < 0) return '';
   const hours = deltaMs / 3600000;
-  if (hours < 1) return '<1h';
-  if (hours < 48) return `${Math.round(hours)}h`;
-  return `${Math.round(hours / 24)}d`;
+  if (hours < 1) return '<1 ч';
+  if (hours < 48) return `${Math.round(hours)} ч`;
+  return `${Math.round(hours / 24)} д`;
 }
 
 /** Millisecond delta → "<1m ago" / "Xm ago" / "Xh ago" (fresh-feed readout). */
 function formatAgoMinutes(deltaMs) {
-  if (!Number.isFinite(deltaMs) || deltaMs < 0) return 'just now';
+  if (!Number.isFinite(deltaMs) || deltaMs < 0) return 'только что';
   const minutes = Math.floor(deltaMs / 60000);
-  if (minutes < 1) return '<1m ago';
-  if (minutes < 90) return `${minutes}m ago`;
-  return `${Math.round(minutes / 60)}h ago`;
+  if (minutes < 1) return '<1 мин назад';
+  if (minutes < 90) return `${minutes} мин назад`;
+  return `${Math.round(minutes / 60)} ч назад`;
 }
 
 /** Normalized 0..1 confidence → low/nominal/high display bucket. */

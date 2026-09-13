@@ -267,9 +267,8 @@ export function createLocalInfrastructureOverlayPublisher({
  * @returns {string} Short reason for getStats().error.
  */
 export function localDatasetError(error) {
-  if (error?.name === 'SyntaxError') return 'dataset is malformed';
-  const message = String(error?.message || '').trim();
-  return message ? `dataset unavailable (${message})` : 'dataset unavailable';
+  if (error?.name === 'SyntaxError') return 'Набор данных поврежден';
+  return 'Набор данных недоступен';
 }
 
 /**
@@ -283,7 +282,7 @@ export function createLocalGeoJsonLayer({
   name,
   color,
   icon = '📍',
-  source = 'Local JSONL',
+  source = 'Локальный JSONL',
   labels = true,
   labelMax = DEFAULT_LABEL_MAX,
   labelGridPx = DEFAULT_LABEL_GRID_PX,
@@ -817,6 +816,8 @@ function featureLabelFromProperties(props, layerId) {
   const tags = props.tags || {};
 
   const candidates = [
+    props['name:ru'],
+    tags['name:ru'],
     props.name,
     tags.name,
     tags['name:en'],
@@ -836,6 +837,7 @@ function labelPriorityFromProperties(props, layerId) {
   const tags = props.tags || {};
 
   let score = 0;
+  if (cleanLabel(props['name:ru']) || cleanLabel(tags['name:ru'])) score += 1200;
   if (cleanLabel(props.name) || cleanLabel(tags.name)) score += 1000;
   if (cleanLabel(tags['name:en'])) score += 700;
   if (cleanLabel(tags.operator) || cleanLabel(props.operator)) score += 180;
@@ -886,7 +888,7 @@ function clampCardLine(value) {
 }
 
 function layerTitle(layerId) {
-  if (layerId === 'local-datacenters') return 'Datacenter';
-  if (layerId === 'local-dams') return 'Dam';
-  return 'Feature';
+  if (layerId === 'local-datacenters') return 'Дата-центр';
+  if (layerId === 'local-dams') return 'Плотина';
+  return 'Объект';
 }

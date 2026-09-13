@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, fikra, codex/fikra-monitor-release]
 
 permissions:
   contents: read
@@ -36,8 +36,14 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      - name: Check publication safety
+        run: node scripts/check-publication.mjs
+
       - name: Install locked dependencies
         run: npm ci
+
+      - name: Check known high-severity dependency vulnerabilities
+        run: npm audit --audit-level=high
 
       - name: Run setup policy checks
         run: npm run doctor -- --json
@@ -66,6 +72,9 @@ jobs:
         with:
           node-version: 24.14.0
           cache: npm
+
+      - name: Check publication safety
+        run: node scripts/check-publication.mjs
 
       - name: Run the Pinokio install path
         run: node scripts/pinokio-install.mjs

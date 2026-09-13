@@ -1,6 +1,7 @@
 import * as Cesium from 'cesium';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { isRateLimitedOutcome, resolveAnnotationTarget } from './annotationResolver.js';
+import { formatNumberRu, t } from '../i18n/index.js';
 
 // Dev convenience: expose the app's Cesium instance for console/preview probing
 // (single shared module instance — avoids dual-Cesium state bugs when testing).
@@ -23,7 +24,7 @@ const COLORS = new Set(['primary', 'amber', 'cyan', 'green', 'red']);
 // Entity FACTS the voice model may attach to an annotation (annotate_map.entityKind) —
 // what kind of thing the target IS, routing the resolver (e.g. point_feature keeps a
 // monument point-first). Unknown values are dropped, never guessed.
-const ENTITY_KINDS = new Set(['building', 'compound', 'district', 'street', 'point_feature']);
+const ENTITY_KINDS = new Set(['building', 'compound', 'district', 'admin_region', 'street', 'point_feature']);
 const DEFAULT_TTL_MS = 22_000;
 const FADE_MS = 1200;
 // Hard ceiling on simultaneously-live marks. Protects against a runaway voice
@@ -145,7 +146,11 @@ export function createAnnotationEngine({
   }
   function releaseController(c) {
     c._retain = (c._retain || 0) - 1;
-    if (c._retain <= 0) activeControllers.delete(c);
+    if (c._retain <= 0) {
+      activeControllers.delete(c);
+      c._detachExternalAbort?.();
+      c._detachExternalAbort = null;
+    }
   }
 
   // World annotations carry persistent per-frame scene animation (pulsing
@@ -219,16 +224,25 @@ export function createAnnotationEngine({
    * @param {boolean} [opts.clearPrevious]
    * @param {boolean} [opts.persist]  Keep until cleared (default true).
    * @param {boolean} [opts.flyTo]    Frame the first resolved annotation.
+   * @param {AbortSignal} [opts.signal] Cancel unresolved voice-turn work.
    * @returns {Promise<{ok, drawn, failed, ids, results}>}
    */
   async function annotate(requests, opts = {}) {
     const list = Array.isArray(requests) ? requests : [requests];
+    if (opts.signal?.aborted) {
+      return { ok: false, drawn: 0, failed: 0, ids: [], results: [], aborted: true };
+    }
     if (opts.clearPrevious) clear(); // bumps generation + aborts older pending work
 
     const persist = opts.persist !== false;
     // Per-call cancellation: bumped/aborted by any later clear() or destroy().
     const controller = new AbortController();
     retainController(controller);
+    if (opts.signal) {
+      const abortFromCaller = () => controller.abort();
+      opts.signal.addEventListener('abort', abortFromCaller, { once: true });
+      controller._detachExternalAbort = () => opts.signal.removeEventListener('abort', abortFromCaller);
+    }
     const myGen = generation;
     const superseded = () => myGen !== generation || controller.signal.aborted;
 
@@ -242,7 +256,9 @@ export function createAnnotationEngine({
     // allSettled gives per-item error isolation (one failed item never aborts the batch); the
     // mutation pass below then runs in ORDER, so de-dup, the synchronous live-cap check, and output
     // order are all preserved exactly as the old serial loop had them.
-    const settled = await Promise.allSettled(list.map((spec) => resolveSpec(spec, controller.signal)));
+    const settled = await Promise.allSettled(list.map((spec) => resolveSpec(spec, controller.signal, {
+      allowRemote: Boolean(opts.flyTo),
+    })));
 
     try {
       for (let i = 0; i < list.length; i += 1) {
@@ -350,7 +366,7 @@ export function createAnnotationEngine({
           results.push(okResult(anno, resolved, anno.id));
         } catch (error) {
           if (superseded()) break;
-          results.push(failResult(spec, error?.message || 'annotation failed', Array.isArray(error?.failedTargets) ? error.failedTargets : null));
+          results.push(failResult(spec, error?.message || t('annotation.failed'), Array.isArray(error?.failedTargets) ? error.failedTargets : null));
         }
       }
     } finally {
@@ -381,11 +397,11 @@ export function createAnnotationEngine({
     };
   }
 
-  async function resolveSpec(spec, signal) {
+  async function resolveSpec(spec, signal, { allowRemote = false } = {}) {
     const type = normalizeType(spec?.type);
     if (type === 'route') {
       const points = Array.isArray(spec.points) ? spec.points : [];
-      if (points.length < 2) throw new Error('a route needs at least 2 waypoints');
+      if (points.length < 2) throw new Error(t('annotation.routeNeedsWaypoints'));
       const resolvedPts = [];
       const failed = [];
       for (const pt of points) {
@@ -398,10 +414,11 @@ export function createAnnotationEngine({
           screenX: pt.screenX,
           screenY: pt.screenY,
           footprint: false,
+          allowRemote,
           signal,
         });
         if (r) resolvedPts.push(r);
-        else failed.push(name || 'a waypoint');
+        else failed.push(name || t('annotation.waypoint'));
       }
       // Honesty: never silently drop waypoints. If any fail to resolve, this is not
       // the route the user asked for (A→B→C must not become A→C), so fail loudly
@@ -409,7 +426,7 @@ export function createAnnotationEngine({
       if (failed.length) {
         // Static message (no raw place text in prose — names live in failedTargets,
         // a structured DATA field, to avoid a prompt-injection surface in tool output).
-        const err = new Error('could not locate one or more route waypoints');
+        const err = new Error(t('annotation.routeWaypointsMissing'));
         err.failedTargets = failed;
         throw err;
       }
@@ -441,6 +458,7 @@ export function createAnnotationEngine({
         screenX: spec.screenX,
         screenY: spec.screenY,
         footprint: false,
+        allowRemote,
         signal,
       });
       const to = await resolveTarget({
@@ -451,6 +469,7 @@ export function createAnnotationEngine({
         screenX: spec.toScreenX,
         screenY: spec.toScreenY,
         footprint: false,
+        allowRemote,
         signal,
       });
       if (!from || !to) {
@@ -478,6 +497,11 @@ export function createAnnotationEngine({
       footprint: wantFootprint,
       intent: spec.intent === 'around_the_thing' ? 'around_the_thing' : 'the_thing',
       entityKind: ENTITY_KINDS.has(spec?.entityKind) ? spec.entityKind : null,
+      // flyTo means the user deliberately named a destination, which may be on
+      // another continent. Prefer global Google Places and do not force it back
+      // into the current viewport.
+      allowRemote,
+      preferPlaces: allowRemote && typeof spec?.target === 'string' && Boolean(spec.target.trim()),
       // The label often carries the ask's true shape when the target omits it
       // ("target: Texas State Capitol" + "label: Capitol grounds") — a resolver HINT only.
       labelHint: typeof spec?.label === 'string' ? spec.label : null,
@@ -1114,25 +1138,34 @@ function greatCircleM(a, b) {
 
 function formatDistance(m) {
   if (!Number.isFinite(m)) return null;
-  if (m >= 1000) return `${(m / 1000).toFixed(m >= 10000 ? 0 : 1)} km`;
-  return `${Math.round(m / 10) * 10} m`;
+  if (m >= 1000) {
+    return `${formatNumberRu(m / 1000, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: m >= 10000 ? 0 : 1,
+    })} км`;
+  }
+  return `${formatNumberRu(Math.round(m / 10) * 10)} м`;
 }
 
 function composeRouteLabel(baseLabel, distM, durS, mode, fallback) {
   const dist = formatDistance(distM);
   if (!dist) return baseLabel;
   const min = Number.isFinite(durS) ? Math.max(1, Math.round(durS / 60)) : null;
-  const word = mode === 'car' ? 'drive' : mode === 'bike' ? 'ride' : 'walk';
+  const modeLabel = mode === 'car'
+    ? t('annotation.mode.car')
+    : mode === 'bike'
+      ? t('annotation.mode.bike')
+      : t('annotation.mode.foot');
   // Fallback = routing was unavailable, so we drew a straight line: label it as a
   // direct line with no travel time (never claim an "X min walk" we didn't compute).
   let metrics;
-  if (fallback) metrics = `${dist} · direct line (no route)`;
-  else metrics = min != null ? `${dist} · ${min} min ${word}` : dist;
-  return baseLabel ? `${baseLabel} — ${metrics}` : metrics;
+  if (fallback) metrics = `${dist} · ${t('annotation.directLine')}`;
+  else metrics = min != null ? `${dist} · ${formatNumberRu(min)} мин · ${modeLabel}` : dist;
+  return baseLabel ? `${baseLabel} · ${metrics}` : metrics;
 }
 
 function appendDistance(baseLabel, distM) {
   const dist = formatDistance(distM);
   if (!dist) return baseLabel;
-  return baseLabel ? `${baseLabel} — ${dist}` : dist;
+  return baseLabel ? `${baseLabel} · ${dist}` : dist;
 }

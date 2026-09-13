@@ -1,6 +1,7 @@
 import { createLocalGeoJsonLayer } from './localGeojson.js';
 import { createFirmsHeatmapLayer } from './firmsHeatmap.js';
 import submarineCablesLayer from './telegeographySubmarineCables.js';
+import { t } from '../i18n/index.js';
 
 // Use Vite's ?url import to properly resolve these assets in dev and build
 import datacentersUrl from './local_data/datacenters/datacenters.geojsonl?url';
@@ -13,10 +14,10 @@ import damsUrl from './local_data/dams/dams.geojsonl?url';
 const datacenters = createLocalGeoJsonLayer({
   id: 'local-datacenters',
   url: datacentersUrl,
-  name: 'Datacenters',
+  name: t('data.layer.datacenters'),
   color: '#00ffff', // Cyan
   icon: '▣',
-  source: 'Local',
+  source: 'Локальные данные',
   labels: true,
   labelMax: 700,
   labelGridPx: 138,
@@ -25,7 +26,7 @@ const datacenters = createLocalGeoJsonLayer({
 const dams = createLocalGeoJsonLayer({
   id: 'local-dams',
   url: damsUrl,
-  name: 'Dams',
+  name: t('data.layer.dams'),
   color: '#0088ff', // Blue
   icon: '▰',
   source: 'USACE',
@@ -39,9 +40,9 @@ const dams = createLocalGeoJsonLayer({
 // but the data is NOT bundled anymore — it needs FIRMS_MAP_KEY server-side.
 const fires = createFirmsHeatmapLayer({
   id: 'local-firms',
-  name: 'FIRMS Active Fires',
+  name: t('data.layer.fires'),
   icon: '▲',
-  source: 'NASA FIRMS · LIVE',
+  source: 'NASA FIRMS · ОНЛАЙН',
 });
 
 export default [

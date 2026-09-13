@@ -15,9 +15,9 @@ test('aircraft identity narration acknowledges missing enrichment', () => {
   assert.match(text, /Every aircraft identity answer MUST explicitly cover operator, type, and route/);
   assert.match(text, /repeat its endpoint codes exactly/);
   assert.match(text, /do not expand airport codes into city names/);
-  assert.match(text, /"Operator details are unavailable"/);
-  assert.match(text, /"Aircraft type is unavailable"/);
-  assert.match(text, /"Route details are unavailable"/);
+  assert.match(text, /"Данные об операторе недоступны"/);
+  assert.match(text, /"Тип самолёта неизвестен"/);
+  assert.match(text, /"Данные о маршруте недоступны"/);
   assert.match(text, /never silently omit missing enrichment/i);
   assert.match(text, /never .* infer it from the callsign/i);
 
@@ -31,7 +31,7 @@ test('aircraft identity narration acknowledges missing enrichment', () => {
   assert.match(followup, /selectedProperties\.operator/);
   assert.match(followup, /selectedProperties\.type/);
   assert.match(followup, /selectedProperties\.route \|\| selectedProperties\.routeOrigin \|\| selectedProperties\.routeDestination/);
-  assert.match(followup, /Operator details are unavailable/);
-  assert.match(followup, /Aircraft type is unavailable/);
-  assert.match(followup, /Route details are unavailable/);
+  assert.match(followup, /Данные об операторе недоступны/);
+  assert.match(followup, /Тип самолёта неизвестен/);
+  assert.match(followup, /Данные о маршруте недоступны/);
 });

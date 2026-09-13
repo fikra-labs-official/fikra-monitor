@@ -162,7 +162,7 @@ test('voice Cockpit next/previous shares the manual Context navigation path', ()
   assert.doesNotMatch(navigate, /flyTo|camera|trackById|_runExplicitNavigation/);
   // An exhausted cohort is an honest failure, not a silent success.
   assert.match(navigate, /ok: changed,/);
-  assert.match(navigate, /error: changed \? null : 'No further context target was available',/);
+  assert.match(navigate, /error: changed \? null : 'Других доступных целей контекста нет',/);
 });
 
 test('accepted navigation releases through PR15-aware ownership before flight', () => {

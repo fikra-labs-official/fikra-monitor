@@ -31,11 +31,19 @@ export const KEY_SETUP_KEYS = Object.freeze([
   Object.freeze({
     id: 'google-maps',
     title: 'GOOGLE MAPS',
-    unlocks: 'The photorealistic 3D planet + place search',
+    unlocks: 'Photorealistic 3D Tiles (browser key)',
     getUrl: 'https://developers.google.com/maps/documentation/tile/get-api-key',
     envVars: Object.freeze(['GOOGLE_MAPS_API_KEY']),
     tier: 'metered',
     clientExposed: true,
+  }),
+  Object.freeze({
+    id: 'google-maps-server',
+    title: 'GOOGLE MAPS SERVER',
+    unlocks: 'Place search, geocoding and optional Street View (private server key)',
+    getUrl: 'https://console.cloud.google.com/apis/credentials',
+    envVars: Object.freeze(['GOOGLE_MAPS_SERVER_API_KEY']),
+    tier: 'metered',
   }),
   Object.freeze({
     id: 'openai',

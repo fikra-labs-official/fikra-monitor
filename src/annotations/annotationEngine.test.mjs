@@ -84,6 +84,103 @@ function httpFailure(status, retryAfter = null) {
   };
 }
 
+test('flyTo annotations opt into remote global Places resolution', async (t) => {
+  installAnimationFrameStubs(t);
+  const { renderer } = fakeRenderer();
+  const calls = [];
+  const engine = createAnnotationEngine({
+    viewer: {},
+    renderer,
+    resolveTarget: async (options) => {
+      calls.push(options);
+      return { lon: 55.2708, lat: 25.2048, height: 0, label: 'Emaar', source: 'places' };
+    },
+  });
+
+  const result = await engine.annotate([{
+    type: 'pin',
+    target: 'Emaar Properties, Dubai',
+  }], { flyTo: true });
+
+  assert.equal(result.ok, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].allowRemote, true);
+  assert.equal(calls[0].preferPlaces, true);
+});
+
+test('voice abort before a slow target resolves prevents annotation and camera mutation', async (t) => {
+  installAnimationFrameStubs(t);
+  const { calls, renderer } = fakeRenderer();
+  let finishResolve;
+  const target = new Promise((resolve) => { finishResolve = resolve; });
+  const engine = createAnnotationEngine({
+    viewer: {},
+    renderer,
+    resolveTarget: () => target,
+  });
+  const controller = new AbortController();
+  const pending = engine.annotate([{ type: 'pin', target: 'slow place' }], {
+    flyTo: true,
+    signal: controller.signal,
+  });
+  controller.abort();
+  finishResolve({ lon: 19.82, lat: 41.33, height: 0, source: 'places' });
+  const result = await pending;
+  assert.equal(result.aborted, true);
+  assert.equal(result.drawn, 0);
+  assert.equal(calls.add, 0);
+  assert.equal(calls.update, 0);
+});
+
+test('voice abort stops a pending outline upgrade from changing an existing mark', async (t) => {
+  installAnimationFrameStubs(t);
+  const { calls, renderer } = fakeRenderer();
+  let finishOutline;
+  const outline = new Promise((resolve) => { finishOutline = resolve; });
+  const engine = createAnnotationEngine({
+    viewer: {},
+    renderer,
+    resolveTarget: async () => ({
+      lon: 19.82, lat: 41.33, height: 0, source: 'places',
+      resolveOutline: () => outline,
+    }),
+  });
+  const controller = new AbortController();
+  const result = await engine.annotate([{ type: 'area', target: 'slow district' }], {
+    signal: controller.signal,
+  });
+  assert.equal(result.drawn, 1);
+  assert.equal(calls.add, 1);
+  controller.abort();
+  finishOutline(FP);
+  await flushMicrotasks();
+  assert.equal(calls.update, 0);
+});
+
+test('admin_region entity fact reaches the resolver unchanged', async (t) => {
+  installAnimationFrameStubs(t);
+  const { renderer } = fakeRenderer();
+  const calls = [];
+  const engine = createAnnotationEngine({
+    viewer: {},
+    renderer,
+    resolveTarget: async (options) => {
+      calls.push(options);
+      return { lon: -4.7278, lat: 37.5443, height: 0, label: 'Andalusia', source: 'geocode' };
+    },
+  });
+
+  const result = await engine.annotate([{
+    type: 'area',
+    target: 'Andalusia, Spain',
+    entityKind: 'admin_region',
+  }]);
+
+  assert.equal(result.ok, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].entityKind, 'admin_region');
+});
+
 test('retry: first-try footprint returns immediately, no retry, no waiting', async () => {
   const { resolve, calls } = scriptedResolver([FP]);
   const { waitFn, delays } = fakeWait();
@@ -393,13 +490,12 @@ test('outline upgrade updates the rendered element in place without remove/add',
   globalThis.requestAnimationFrame = () => 1;
   globalThis.cancelAnimationFrame = () => {};
   globalThis.window = {
-    __GOOGLE_MAPS_API_KEY__: 'unit-test-key',
     setTimeout: globalThis.setTimeout,
     clearTimeout: globalThis.clearTimeout,
   };
   let overpassCall = 0;
   globalThis.fetch = async (url) => {
-    if (String(url).startsWith('https://maps.googleapis.com/')) {
+    if (String(url).startsWith('/api/google/geocode?')) {
       return { json: async () => ({
         status: 'OK',
         results: [{

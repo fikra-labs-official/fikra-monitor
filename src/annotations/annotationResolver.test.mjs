@@ -104,6 +104,18 @@ test('strict mode: unchanged — named district-sized areas only', () => {
   assert.ok(Math.abs(fp.ring[0][1] - (ANCHOR.lat + 200 / 111320)) < 0.01);
 });
 
+test('strict mode matches a Cyrillic district query through OSM name:ru', () => {
+  const fp = selectFootprint([
+    squareWay(ANCHOR, 0, 0, 500_000, {
+      landuse: 'residential',
+      name: 'Dubai Marina',
+      'name:ru': 'Дубай Марина',
+    }),
+  ], ANCHOR.lat, ANCHOR.lon, 'Дубай Марина', 'strict');
+  assert.ok(fp, 'Russian voice names must retain a usable district outline match');
+  assert.equal(fp.kind, 'area');
+});
+
 test('loose mode: a named water body beats a shore feature named after it (field test 9)', () => {
   // "Lady Bird Lake" — the anchor sits ON the water. Before natural=water joined the
   // sweep, the lake was never a candidate and a shoreline park NAMED AFTER it won on
@@ -146,6 +158,7 @@ test('refineScope: entityKind refines only an unresolved (auto) scope', () => {
   assert.equal(refineScope('auto', 'building'), 'building');
   assert.equal(refineScope('auto', 'compound'), 'compound');
   assert.equal(refineScope('auto', 'district'), 'neighborhood');
+  assert.equal(refineScope('auto', 'admin_region'), 'state');
   assert.equal(refineScope('auto', 'street'), 'street');
   assert.equal(refineScope('auto', 'point_feature'), 'auto'); // point-first handled separately
   assert.equal(refineScope('auto', undefined), 'auto');
@@ -182,7 +195,6 @@ function installGoogleMocks(t, handler) {
   const originalWindow = globalThis.window;
   const originalFetch = globalThis.fetch;
   globalThis.window = {
-    __GOOGLE_MAPS_API_KEY__: 'unit-test-key',
     setTimeout: globalThis.setTimeout,
     clearTimeout: globalThis.clearTimeout,
   };
@@ -194,11 +206,293 @@ function installGoogleMocks(t, handler) {
   });
 }
 
+test('explicit remote destination uses global Places without current-view bias', async (t) => {
+  const calls = [];
+  installGoogleMocks(t, async (url) => {
+    const value = String(url);
+    calls.push(value);
+    assert.match(value, /^\/api\/google\/text-search\?/);
+    const params = new URL(value, 'http://localhost').searchParams;
+    assert.equal(params.get('q'), 'Emaar Properties, Dubai');
+    assert.equal(params.has('lat'), false);
+    assert.equal(params.has('lon'), false);
+    return {
+      ok: true,
+      json: async () => ({ places: [{
+        id: 'emaar-dubai',
+        name: 'Emaar Properties',
+        address: 'Dubai, United Arab Emirates',
+        latitude: 25.2048,
+        longitude: 55.2708,
+        primaryType: 'corporate_office',
+        types: ['corporate_office', 'point_of_interest'],
+      }] }),
+    };
+  });
+
+  const resolved = await resolveAnnotationTarget({
+    viewer: closeViewportViewer(),
+    target: 'Emaar Properties, Dubai',
+    allowRemote: true,
+    preferPlaces: true,
+  });
+
+  assert.ok(resolved);
+  assert.equal(resolved.source, 'places');
+  assert.equal(resolved.label, 'Emaar Properties');
+  assert.deepEqual([resolved.lat, resolved.lon], [25.2048, 55.2708]);
+  assert.equal(calls.length, 1, 'a successful Places result must not fall through to Geocoding');
+});
+
+test('remote Places miss falls back to Geocoding without current-view bounds', async (t) => {
+  const calls = [];
+  installGoogleMocks(t, async (url) => {
+    const value = String(url);
+    calls.push(value);
+    if (value.startsWith('/api/google/text-search')) {
+      return { ok: true, json: async () => ({ places: [] }) };
+    }
+    assert.match(value, /^\/api\/google\/geocode\?/);
+    const parsed = new URL(value, 'http://localhost');
+    assert.equal(parsed.searchParams.get('address'), 'Remote fallback office, Dubai');
+    assert.equal(parsed.searchParams.has('bounds'), false, 'remote fallback must not prefer Austin');
+    return { json: async () => geocodePayload({
+      lat: 25.2048,
+      lon: 55.2708,
+      types: ['premise'],
+      label: 'Remote fallback office, Dubai',
+    }) };
+  });
+
+  const resolved = await resolveAnnotationTarget({
+    viewer: closeViewportViewer(),
+    target: 'Remote fallback office, Dubai',
+    allowRemote: true,
+    preferPlaces: true,
+  });
+
+  assert.ok(resolved);
+  assert.equal(resolved.source, 'geocode');
+  assert.deepEqual([resolved.lat, resolved.lon], [25.2048, 55.2708]);
+  assert.equal(calls.length, 2);
+});
+
+test('remote Places administrative type outranks a misleading district hint', async (t) => {
+  const calls = [];
+  installGoogleMocks(t, async (url) => {
+    const value = String(url);
+    calls.push(value);
+    if (value.startsWith('/api/google/text-search')) {
+      return {
+        ok: true,
+        json: async () => ({ places: [{
+          name: 'Andalusia',
+          latitude: 37.5443,
+          longitude: -4.7278,
+          types: ['administrative_area_level_1', 'political'],
+        }] }),
+      };
+    }
+    if (value.startsWith('/api/osm/admin-boundary?')) {
+      const params = new URL(value, 'http://localhost').searchParams;
+      assert.equal(params.get('q'), 'Andalusia, Spain');
+      assert.equal(params.get('scope'), 'state');
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({
+          source: 'nominatim',
+          ring: [
+            [-7.6, 36.0],
+            [-1.6, 36.0],
+            [-1.6, 38.8],
+            [-7.6, 38.8],
+            [-7.6, 36.0],
+          ],
+        }),
+      };
+    }
+    assert.equal(value, '/api/overpass');
+    if (calls.filter((call) => call === '/api/overpass').length === 1) {
+      return {
+        ok: true,
+        json: async () => ({ elements: [{
+          type: 'area',
+          id: 3_600_349_944,
+          tags: {
+            name: 'Andalucía',
+            'name:en': 'Andalusia',
+            admin_level: '4',
+          },
+        }] }),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ elements: [{
+        type: 'relation',
+        geometry: [
+          { lon: -7.6, lat: 36.0 },
+          { lon: -1.6, lat: 36.0 },
+          { lon: -1.6, lat: 38.8 },
+          { lon: -7.6, lat: 38.8 },
+          { lon: -7.6, lat: 36.0 },
+        ],
+      }] }),
+    };
+  });
+
+  const resolved = await resolveAnnotationTarget({
+    viewer: closeViewportViewer(),
+    target: 'Andalusia, Spain',
+    footprint: true,
+    entityKind: 'district',
+    allowRemote: true,
+    preferPlaces: true,
+  });
+
+  assert.ok(resolved);
+  assert.equal(resolved.source, 'footprint');
+  assert.equal(resolved.footprintKind, 'area');
+  assert.equal(resolved.synthesized, false, 'admin boundary must not become a district fallback disc');
+  assert.equal(resolved.ring.length, 5);
+  assert.equal(calls.filter((call) => call.startsWith('/api/osm/admin-boundary?')).length, 1);
+  assert.equal(calls.filter((call) => call === '/api/overpass').length, 0, 'direct boundary must skip slow relation pivots');
+});
+
+test('administrative boundary falls back to Overpass when Nominatim is unavailable', async (t) => {
+  const calls = [];
+  installGoogleMocks(t, async (url) => {
+    const value = String(url);
+    calls.push(value);
+    if (value.startsWith('/api/google/text-search')) {
+      return {
+        ok: true,
+        json: async () => ({ places: [{
+          name: 'Fallback Region',
+          latitude: 40,
+          longitude: 20,
+          types: ['administrative_area_level_1', 'political'],
+        }] }),
+      };
+    }
+    if (value.startsWith('/api/osm/admin-boundary?')) {
+      return { ok: false, status: 503, headers: { get: () => null } };
+    }
+    assert.equal(value, '/api/overpass');
+    if (calls.filter((call) => call === '/api/overpass').length === 1) {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({ elements: [{
+          type: 'area',
+          id: 3_600_000_123,
+          tags: { name: 'Fallback Region', admin_level: '4' },
+        }] }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({ elements: [{
+        type: 'relation',
+        geometry: [
+          { lon: 19, lat: 39 },
+          { lon: 21, lat: 39 },
+          { lon: 21, lat: 41 },
+          { lon: 19, lat: 41 },
+          { lon: 19, lat: 39 },
+        ],
+      }] }),
+    };
+  });
+
+  const resolved = await resolveAnnotationTarget({
+    viewer: closeViewportViewer(),
+    target: 'Fallback Region, Exampleland',
+    footprint: true,
+    entityKind: 'admin_region',
+    allowRemote: true,
+    preferPlaces: true,
+  });
+
+  assert.ok(resolved);
+  assert.equal(resolved.source, 'footprint');
+  assert.equal(resolved.ring.length, 5);
+  assert.equal(calls.filter((call) => call.startsWith('/api/osm/admin-boundary?')).length, 1);
+  assert.equal(calls.filter((call) => call === '/api/overpass').length, 2);
+});
+
+test('admin_region entity kind bypasses the near-view guard as state scope', async (t) => {
+  const calls = [];
+  installGoogleMocks(t, async (url) => {
+    calls.push(String(url));
+    assert.match(String(url), /^\/api\/google\/geocode\?/);
+    return { json: async () => geocodePayload({
+      lat: 37.5443,
+      lon: -4.7278,
+      types: ['political'],
+      label: 'Andalusia, Spain',
+    }) };
+  });
+
+  const resolved = await resolveAnnotationTarget({
+    viewer: closeViewportViewer(),
+    target: 'Andalusia, Spain',
+    entityKind: 'admin_region',
+  });
+
+  assert.ok(resolved, 'explicit admin-region fact keeps a legitimate remote anchor');
+  assert.equal(resolved.source, 'geocode');
+  assert.equal(calls.length, 1, 'admin-region fact suppresses near-view recovery');
+});
+
+test('remote district keeps a dashed Places-viewport boundary when Overpass is unavailable', async (t) => {
+  installGoogleMocks(t, async (url) => {
+    const value = String(url);
+    if (value.startsWith('/api/google/text-search')) {
+      return {
+        ok: true,
+        json: async () => ({ places: [{
+          name: 'Дубай Марина',
+          latitude: 25.0806,
+          longitude: 55.1398,
+          types: ['neighborhood', 'political'],
+          viewport: {
+            low: { latitude: 25.06, longitude: 55.12 },
+            high: { latitude: 25.11, longitude: 55.16 },
+          },
+        }] }),
+      };
+    }
+    assert.equal(value, '/api/overpass');
+    return { ok: false, status: 502, headers: { get: () => null } };
+  });
+
+  const resolved = await resolveAnnotationTarget({
+    viewer: closeViewportViewer(),
+    target: 'Дубай Марина, Дубай',
+    footprint: true,
+    entityKind: 'district',
+    allowRemote: true,
+    preferPlaces: true,
+  });
+
+  assert.ok(resolved);
+  assert.equal(resolved.source, 'footprint');
+  assert.equal(resolved.synthesized, true);
+  assert.equal(resolved.footprintKind, 'area');
+  assert.equal(resolved.ring.length, 45);
+});
+
 test('ask-side admin bypass: "the Texas Capitol" recovers near-view despite a far state-typed geocode', async (t) => {
   const calls = [];
   installGoogleMocks(t, async (url) => {
     calls.push(String(url));
-    if (String(url).startsWith('https://maps.googleapis.com/')) {
+    if (String(url).startsWith('/api/google/geocode?')) {
       return { json: async () => geocodePayload({
         lat: 31.0000,
         lon: -99.0000,
@@ -233,7 +527,7 @@ test('ask-side admin bypass: explicit "state of Texas" skips recovery and proxim
   const calls = [];
   installGoogleMocks(t, async (url) => {
     calls.push(String(url));
-    assert.match(String(url), /^https:\/\/maps\.googleapis\.com\/maps\/api\/geocode/);
+    assert.match(String(url), /^\/api\/google\/geocode\?/);
     return { json: async () => geocodePayload({
       lat: 31.0000,
       lon: -99.0000,
@@ -271,7 +565,7 @@ for (const fixture of [
     const calls = [];
     installGoogleMocks(t, async (url) => {
       calls.push(String(url));
-      if (String(url).startsWith('https://maps.googleapis.com/')) {
+      if (String(url).startsWith('/api/google/geocode?')) {
         return { json: async () => geocodePayload({
           lat: fixture.lat,
           lon: fixture.lon,
@@ -297,7 +591,7 @@ test('ask-side admin bypass: bare "Texas" remains on the guarded recovery path',
   const calls = [];
   installGoogleMocks(t, async (url) => {
     calls.push(String(url));
-    if (String(url).startsWith('https://maps.googleapis.com/')) {
+    if (String(url).startsWith('/api/google/geocode?')) {
       return { json: async () => geocodePayload({
         lat: 31.0000,
         lon: -99.0000,
@@ -326,8 +620,8 @@ test('ask-side admin bypass: admin level 2/3 result types never grant a township
   const calls = [];
   installGoogleMocks(t, async (url) => {
     calls.push(String(url));
-    if (String(url).startsWith('https://maps.googleapis.com/')) {
-      const query = new URL(String(url)).searchParams.get('address');
+    if (String(url).startsWith('/api/google/geocode?')) {
+      const query = new URL(String(url), 'http://localhost').searchParams.get('address');
       return { json: async () => geocodePayload({
         lat: 39.7817,
         lon: -89.6501,

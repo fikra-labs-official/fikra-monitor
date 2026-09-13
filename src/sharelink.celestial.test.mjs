@@ -506,7 +506,7 @@ test('explicit Context transitions claim the visual restore lane before transiti
   // OFF branch is validated by its own guard; the named-mode branch must claim
   // only AFTER the unknown-mode rejection, so a rejected request takes nothing.
   const offGuardIndex = facade.indexOf("if (!mode || mode === 'off')");
-  const rejectIndex = facade.indexOf('Unknown context mode');
+  const rejectIndex = facade.indexOf('Неизвестный режим контекста');
   assert.ok(offGuardIndex >= 0, 'setContextMode must keep its OFF guard');
   assert.ok(rejectIndex > offGuardIndex, 'setContextMode must still reject unknown modes');
 
@@ -570,17 +570,17 @@ test('public visual facades reject the complete invalid request before authority
         '  setDetection({ enabled, mode, densityPct, allocationStrategy, fadePct, outsideOpacityPct } = {}) {',
         '  async setMapStack(stackId) {',
       ),
-      validations: ['enabled !== undefined', 'Invalid outside opacity'],
+      validations: ['enabled !== undefined', 'Неверная внешняя непрозрачность'],
     },
     {
       label: 'setBloom',
       block: sourceBlock('  setBloom({ enabled, intensityPct } = {}) {', '  setSharpen({ enabled, intensityPct } = {}) {'),
-      validations: ['Invalid bloom enabled value', 'Invalid bloom intensity'],
+      validations: ['Неверное значение включения свечения', 'Неверная интенсивность свечения'],
     },
     {
       label: 'setSharpen',
       block: sourceBlock('  setSharpen({ enabled, intensityPct } = {}) {', '  get celestialRingEnabled() {'),
-      validations: ['Invalid sharpen enabled value', 'Invalid sharpen intensity'],
+      validations: ['Неверное значение включения резкости', 'Неверная интенсивность резкости'],
     },
     {
       label: 'setCelestialRingEnabled',
@@ -589,9 +589,9 @@ test('public visual facades reject the complete invalid request before authority
         '  setOrbit(enabled) {',
       ),
       validations: [
-        'Invalid celestial ring enabled value',
-        'Celestial ring options must be boolean',
-        'Celestial ring is available only in Normal style',
+        'Неверное значение включения небесного кольца',
+        'Параметры небесного кольца должны быть логическими значениями',
+        'Небесное кольцо доступно только в обычном стиле',
       ],
     },
   ];

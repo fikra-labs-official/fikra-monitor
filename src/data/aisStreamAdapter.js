@@ -72,21 +72,21 @@ export function classifyAisFailure(input = {}) {
   }
 
   if (status === 401 || status === 403) {
-    return { kind: 'auth', message: `AISStream rejected the API key (HTTP ${status})` };
+    return { kind: 'auth', message: `AISStream отклонил ключ API (HTTP ${status})` };
   }
   if (status === 429) {
     return {
       kind: 'rate-limit',
-      message: 'AISStream rate-limited this key (HTTP 429)',
+      message: 'AISStream ограничил частоту запросов для этого ключа (HTTP 429)',
       retryAfterMs: fromHeader(),
     };
   }
   if (Number.isFinite(status) && status >= 400) {
-    return { kind: 'transport', message: `AISStream upgrade failed (HTTP ${status})` };
+    return { kind: 'transport', message: `Не удалось подключиться к AISStream (HTTP ${status})` };
   }
-  if (AUTH_TEXT.test(text)) return { kind: 'auth', message: text };
-  if (RATE_TEXT.test(text)) return { kind: 'rate-limit', message: text, retryAfterMs: fromHeader() };
-  return { kind: 'transport', message: text || 'AISStream websocket error' };
+  if (AUTH_TEXT.test(text)) return { kind: 'auth', message: 'AISStream отклонил ключ API' };
+  if (RATE_TEXT.test(text)) return { kind: 'rate-limit', message: 'AISStream ограничил частоту запросов для этого ключа', retryAfterMs: fromHeader() };
+  return { kind: 'transport', message: 'Ошибка соединения AISStream' };
 }
 
 /**
@@ -353,7 +353,7 @@ export function createAisStreamAdapter(options) {
       return;
     }
     if (!socket) {
-      failGeneration(owner, generation, { kind: 'transport', message: 'socket factory returned nothing' });
+      failGeneration(owner, generation, { kind: 'transport', message: 'Не удалось создать соединение AISStream' });
       return;
     }
     sockets.set(generation, socket);
@@ -367,7 +367,7 @@ export function createAisStreamAdapter(options) {
       abort(socket, 'unsupported-transport');
       failGeneration(owner, generation, {
         kind: 'transport',
-        message: 'AIS socket does not expose ws emitter semantics',
+        message: 'Транспорт AIS не поддерживает необходимый интерфейс соединения',
       });
       return;
     }

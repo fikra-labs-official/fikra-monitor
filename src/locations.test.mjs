@@ -57,7 +57,7 @@ async function runSearch(viewer, options, { result = AUSTIN_RESULT, query = 'aus
   const hadWindow = Object.hasOwn(globalThis, 'window');
   const priorWindow = globalThis.window;
   const priorFetch = globalThis.fetch;
-  globalThis.window = { __GOOGLE_MAPS_API_KEY__: 'test-key' };
+  globalThis.window = {};
   globalThis.fetch = async () => ({
     json: async () => ({ status: 'OK', results: [result] }),
   });
@@ -93,6 +93,12 @@ test('parks / lakes / campuses frame as area-overview, not precise-place', () =>
   assert.equal(geocodeNavigationMode(['natural_feature', 'establishment']), 'area-overview');
   assert.equal(geocodeNavigationMode(['university', 'point_of_interest']), 'area-overview');
   assert.equal(geocodeNavigationMode(['airport']), 'area-overview');
+});
+
+test('Google geocoding uses the same-origin proxy and Russian display labels', () => {
+  const source = fs.readFileSync(new URL('./locations.js', import.meta.url), 'utf8');
+  assert.match(source, /\/api\/google\/geocode\?address=\$\{encodeURIComponent\(query\)\}&language=ru/);
+  assert.doesNotMatch(source, /maps\.googleapis\.com\/maps\/api\/geocode/);
 });
 
 test('streets frame as street-corridor (rootcause doc §3 — Sixth Street)', () => {

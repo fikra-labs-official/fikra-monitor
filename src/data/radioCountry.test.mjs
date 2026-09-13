@@ -10,12 +10,15 @@ test('Radio country normalization maps ISO codes and bounded common names', () =
     ['United States of America', 'US'],
     ['UK', 'GB'],
     ['South Korea', 'KR'],
+    ['Россия', 'RU'],
   ]) {
     const result = normalizeRadioCountryInput(input);
     assert.equal(result.valid, true, input);
     assert.equal(result.code, code, input);
     assert.equal(Object.isFrozen(result), true, input);
   }
+  assert.equal(normalizeRadioCountryInput('FR').name, 'Франция');
+  assert.equal(normalizeRadioCountryInput('RU').name, 'Россия');
 });
 
 test('Radio country normalization rejects malformed, non-ISO, and oversized values', () => {

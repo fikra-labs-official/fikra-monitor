@@ -78,11 +78,11 @@ test('normalization keeps only healthy geolocated public HTTPS MP3/AAC streams',
   const normalized = normalizeRadioBrowserStation(station());
   assert.equal(normalized.id, UUID);
   assert.equal(normalized.streamUrl, 'https://stream.example.org/live.mp3');
-  assert.equal(normalized.country, 'United States');
+  assert.equal(normalized.country, 'Соединенные Штаты');
   assert.equal(normalized.countryCode, 'US');
   assert.equal(normalized.metadataTrust, 'untrusted-community');
   const franceByName = normalizeRadioBrowserStation(station({ country: 'France', countrycode: '' }));
-  assert.equal(franceByName.country, 'France');
+  assert.equal(franceByName.country, 'Франция');
   assert.equal(franceByName.countryCode, 'FR');
   const invalidCountryCode = normalizeRadioBrowserStation(station({ country: 'Atlantis', countrycode: 'ZZ' }));
   assert.equal(invalidCountryCode.country, 'Atlantis');

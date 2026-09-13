@@ -211,7 +211,7 @@ test('a conversion survives a poll refresh, in both the billboard and the tracke
     assert.equal(billboard.image, aircraftIcon('tr3b'),
       'the poll reconciler re-images through the TR-3B resolver, not the raw class');
     // Live telemetry keeps flowing; only the class label is the operator's fiction.
-    assert.match(entity.gevLabelModel.title, /^DAL123 · FL350 · 486 kts$/);
+    assert.match(entity.gevLabelModel.title, /^DAL123 · FL350 · 486 уз$/);
     assert.deepEqual(entity.gevLabelModel.details.slice(0, 1), ['TR-3B'],
       'the tracked card class line reports TR-3B, replacing operator/type');
     assert.equal(

@@ -178,7 +178,7 @@ test('the Radio chip catches lifecycle rejection and semantic false through the 
     src.indexOf("this._radioFilter?.addEventListener('change'"),
   );
   assert.match(radioControls, /await this\._runUserFacingContextAction\(/);
-  assert.match(radioControls, /Radio could not \$\{enabling \? 'start' : 'stop'\} cleanly/);
+  assert.match(radioControls, /Не удалось корректно \$\{enabling \? 'включить' : 'выключить'\} Radio/);
   assert.match(radioControls, /if \(toggled === false\) return/);
 });
 
@@ -284,7 +284,7 @@ test('a lost cross-mode switch says Context is off, and the state agrees', () =>
   );
   assert.match(
     setter,
-    /error: crossModeSwitchLost\s*\? `Switch to \$\{contextModeWord\(canonical\)\} did not complete — Context is now off`/,
+    /error: crossModeSwitchLost\s*\? `Переход в режим «\$\{contextModeWord\(canonical\)\}» не завершён\. Контекст теперь выключен`/,
     'a lost switch is reported in plain words, in the vocabulary the reader uses',
   );
   assert.match(setter, /\{ contextOff: true, priorMode \}/, 'and machine-readably');

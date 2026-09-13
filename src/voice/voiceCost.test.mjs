@@ -55,13 +55,13 @@ const dollarsOfUsage = (usd) => ({
 
 test('registry exposes exactly the two tiers the UI offers', () => {
   assert.deepEqual([...VOICE_TIERS].sort(), ['mini', 'standard']);
-  assert.equal(DEFAULT_VOICE_TIER, 'standard');
+  assert.equal(DEFAULT_VOICE_TIER, 'mini');
 });
 
 test('standard tier still points at the model vite.config.js defaults to', () => {
   // If this fails, the client cost estimate is being computed against a
   // different model than the session actually runs on.
-  assert.equal(VOICE_MODELS.standard.id, 'gpt-realtime-2');
+  assert.equal(VOICE_MODELS.standard.id, 'gpt-realtime-2.1');
 });
 
 test('mini tier uses a published mini model id, not a guessed -2-mini variant', () => {
@@ -84,7 +84,7 @@ test('mini is cheaper than standard on every single rate', () => {
 
 test('resolveVoiceModel returns the requested tier', () => {
   assert.equal(resolveVoiceModel('mini').id, 'gpt-realtime-2.1-mini');
-  assert.equal(resolveVoiceModel('standard').id, 'gpt-realtime-2');
+  assert.equal(resolveVoiceModel('standard').id, 'gpt-realtime-2.1');
 });
 
 test('resolveVoiceModel tolerates case and whitespace', () => {
@@ -92,7 +92,7 @@ test('resolveVoiceModel tolerates case and whitespace', () => {
   assert.equal(resolveVoiceModel('Standard').tier, 'standard');
 });
 
-test('unknown, empty, and hostile tiers fall back to standard rather than throwing', () => {
+test('unknown, empty, and hostile tiers fall back to mini rather than throwing', () => {
   // This is the guard that keeps an arbitrary querystring out of the OpenAI
   // model field. Every one of these must resolve, never throw.
   for (const bad of [
@@ -111,8 +111,8 @@ test('unknown, empty, and hostile tiers fall back to standard rather than throwi
     true,
   ]) {
     const resolved = resolveVoiceModel(bad);
-    assert.equal(resolved.tier, 'standard', `fallback for ${JSON.stringify(bad)}`);
-    assert.equal(resolved.id, 'gpt-realtime-2');
+    assert.equal(resolved.tier, 'mini', `fallback for ${JSON.stringify(bad)}`);
+    assert.equal(resolved.id, 'gpt-realtime-2.1-mini');
   }
 });
 
@@ -445,10 +445,10 @@ test('the tracker reports the model it is charging against', () => {
   assert.equal(state.modelId, 'gpt-realtime-2.1-mini');
 });
 
-test('an unknown tier tracks at standard rates rather than free', () => {
+test('an unknown tier tracks at the configured default rates rather than free', () => {
   // Charging $0 for an unrecognised tier would silently disable the cap.
   const tracker = createVoiceCostTracker({ tier: 'nonsense' });
-  assert.equal(tracker.state().tier, 'standard');
+  assert.equal(tracker.state().tier, DEFAULT_VOICE_TIER);
   assert.ok(tracker.record(FULL_USAGE).totalUsd > 0);
 });
 
@@ -457,9 +457,9 @@ test('an unknown tier tracks at standard rates rather than free', () => {
  * -------------------------------------------------------------- */
 
 test('F3: a known model id resolves to its own rate table', () => {
-  assert.equal(resolveVoiceModelById('gpt-realtime-2').tier, 'standard');
+  assert.equal(resolveVoiceModelById('gpt-realtime-2.1').tier, 'standard');
   assert.equal(resolveVoiceModelById('gpt-realtime-2.1-mini').tier, 'mini');
-  assert.equal(resolveVoiceModelById('gpt-realtime-2').recognized, true);
+  assert.equal(resolveVoiceModelById('gpt-realtime-2.1').recognized, true);
 });
 
 test('F3: an unrecognised model id bills at the most expensive known rates', () => {
@@ -487,15 +487,15 @@ test('F3: the most expensive model is derived from the registry, not hardcoded',
 
 test('F3: modelId outranks tier when both are supplied', () => {
   // The env override case: tier says mini, the server actually served standard.
-  const tracker = createVoiceCostTracker({ tier: 'mini', modelId: 'gpt-realtime-2' });
-  assert.equal(tracker.state().modelId, 'gpt-realtime-2');
+  const tracker = createVoiceCostTracker({ tier: 'mini', modelId: 'gpt-realtime-2.1' });
+  assert.equal(tracker.state().modelId, 'gpt-realtime-2.1');
   assert.equal(tracker.state().tier, 'standard');
 });
 
 test('F3: pricing by tier alone would have under-metered an overridden session', () => {
   // Concrete statement of the bug: same usage, tier-priced vs actually-served.
   const byTier = createVoiceCostTracker({ tier: 'mini' });
-  const byModel = createVoiceCostTracker({ tier: 'mini', modelId: 'gpt-realtime-2' });
+  const byModel = createVoiceCostTracker({ tier: 'mini', modelId: 'gpt-realtime-2.1' });
   const tierCost = byTier.record(FULL_USAGE).totalUsd;
   const realCost = byModel.record(FULL_USAGE).totalUsd;
   assert.ok(realCost > tierCost * 3, `real ${realCost} vs tier-assumed ${tierCost}`);
@@ -551,7 +551,7 @@ test('markIncomplete flags the accounting as partial, without a direction claim'
   tracker.markIncomplete();
   assert.equal(tracker.state().incomplete, true);
   assert.equal(tracker.state().display, '~$1.00*');
-  assert.match(tracker.state().note, /incomplete/i);
+  assert.match(tracker.state().note, /неполн/i);
 });
 
 test('the incomplete marker never claims the total is a minimum', () => {

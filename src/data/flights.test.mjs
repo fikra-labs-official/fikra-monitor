@@ -161,7 +161,7 @@ test('nonempty OpenSky payload with zero usable rows cannot prove share target a
     await flightsLayer.update({ camera: { positionCartographic: null }, scene: {} });
     const resolution = await flightsLayer.resolveTrackingRestoreTarget('abc123');
     assert.equal(resolution.status, 'source-unavailable');
-    assert.match(flightsLayer.getStats().error, /Malformed OpenSky aircraft rows/);
+    assert.match(flightsLayer.getStats().error, /неверные записи о самолетах в ответе OpenSky/);
     assert.equal(flightsLayer.getAnalystRecords().length, 1, 'warm aircraft data is preserved');
   } finally {
     globalThis.fetch = realFetch;
@@ -225,12 +225,12 @@ test('flights poll refreshes tracked callsign/FL/kts and marks a missed poll STA
     await flightsLayer.update(viewer);
     assert.equal(entity.gevLabelModel.title, 'DAL123');
     assert.match(entity.gevLabelModel.details.join(' · '), /FL350/);
-    assert.match(entity.gevLabelModel.details.join(' · '), /486 kts/);
+    assert.match(entity.gevLabelModel.details.join(' · '), /486 уз/);
 
     await flightsLayer.update(viewer);
     assert.match(
       [entity.gevLabelModel.title, ...entity.gevLabelModel.details].join(' · '),
-      /STALE/,
+      /УСТАРЕЛО/,
     );
   } finally {
     globalThis.fetch = realFetch;
@@ -346,7 +346,7 @@ test('real civil track path creates no native label and publishes every cached h
     assert.equal(entity.label, undefined);
     assert.ok(entities.values.every((candidate) => candidate.label === undefined));
     assert.deepEqual(entity.gevLabelModel, {
-      title: 'N12345 · FL350 · 486 kts',
+      title: 'N12345 · FL350 · 486 уз',
       details: ['TEST AIR · A320', 'AUS → LAX'],
       accent: '#39d0ff',
     });
