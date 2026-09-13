@@ -1,5 +1,15 @@
 # README media provenance
 
+## Fikra Monitor app captures
+
+The following unedited JPEGs were captured from the running, Russian-localized Fikra Monitor app on 2026-09-13 for Fikra Labs project documentation:
+
+- `fikra-tunis-3d.jpg`: Al-Fath Mosque, Tunis, using Google Photorealistic 3D Tiles.
+- `fikra-flight-cockpit.jpg`: virtual cockpit view of BRQ218 using public flight data and Google map imagery; the viewpoint and flight plan are modeled.
+- `fikra-nasr-city-traffic.jpg`: Abbas El Akkad Street, Nasr City, Cairo, using Esri satellite imagery and TomTom flow visualization. Markers are modeled representations of flow, not independently tracked vehicles.
+
+The captures preserve their visible provider attribution and contain no API-key settings or terminal output. They are app captures, not AI-generated illustrations. Third-party imagery, data, trademarks, and attribution remain subject to their respective providers' terms; the project's MIT code license does not grant rights to those elements. Keep visible attribution intact when sharing these captures.
+
 ## Capture GIFs
 
 Bilawal Sidhu created and owns the following 17 GIFs and has authorized their inclusion and redistribution as part of this public repository and its project documentation. Any appearance by Bilawal Sidhu in these captures is included with his permission.

@@ -10,6 +10,28 @@ This is an exploratory visualization of public signals, not an authoritative ope
 
 [Русский](README.md) · [Full setup](docs/setup.en.md) · [Security](SECURITY.md) · [Data sources](DATA_SOURCES.md)
 
+## Screenshots
+
+Screenshots of the running Fikra Monitor app with its Russian interface. The Google 3D and TomTom traffic views shown here require your own provider keys; the baseline map starts without them.
+
+### Tunis: Al-Fath Mosque in 3D
+
+Photorealistic geometry of the mosque and surrounding blocks from Google Photorealistic 3D Tiles. This is map data, not a live video feed.
+
+![Al-Fath Mosque and surrounding blocks in Tunis in Fikra Monitor's 3D view](docs/media/fikra-tunis-3d.jpg)
+
+### Flight: cockpit view
+
+A virtual follow-camera for flight BRQ218 using public flight data. The viewpoint and flight plan are modeled by the app, not footage from a real cockpit.
+
+![Virtual cockpit view of flight BRQ218 with altitude, speed, and flight context](docs/media/fikra-flight-cockpit.jpg)
+
+### Cairo: traffic in Nasr City
+
+Abbas El Akkad Street on Esri satellite imagery with TomTom flow visualization. Moving markers illustrate traffic flow, not individual vehicles' positions or an exact vehicle count.
+
+![TomTom traffic flow in Nasr City, Cairo, displayed in Fikra Monitor](docs/media/fikra-nasr-city-traffic.jpg)
+
 ## Quick start
 
 Install Git and **Node.js 24.14+ in the 24 LTS line** (a compatible 26 line is also supported; see `package.json`). No API key or `.env` file is needed for the first launch. The keyless globe uses available imagery and map sources; Google 3D and some live layers are optional upgrades.
