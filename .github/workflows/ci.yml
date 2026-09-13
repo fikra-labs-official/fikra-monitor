@@ -76,6 +76,9 @@ jobs:
       - name: Check publication safety
         run: node scripts/check-publication.mjs
 
+      - name: Verify native credential file permissions
+        run: node --test src/keySetupHardening.test.mjs
+
       - name: Run the Pinokio install path
         run: node scripts/pinokio-install.mjs
 

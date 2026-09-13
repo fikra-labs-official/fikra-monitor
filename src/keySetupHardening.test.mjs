@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { hardenCredentialFile } from './keySetupHardening.mjs';
 
 const FILE = path.join(os.tmpdir(), 'provider-settings-test');
@@ -267,7 +268,20 @@ test('Windows production hardener applies its exact DACL with native tools', {
   const filepath = path.join(directory, 'ENVIRONMENT.tmp');
   try {
     fs.writeFileSync(filepath, '');
-    assert.equal(hardenCredentialFile(filepath), true);
+    const nativeCalls = [];
+    const hardened = hardenCredentialFile(filepath, {
+      spawn(command, args, options) {
+        const result = spawnSync(command, args, options);
+        nativeCalls.push({
+          tool: path.win32.basename(command),
+          status: result.status,
+          signal: result.signal,
+          errorCode: result.error?.code,
+        });
+        return result;
+      },
+    });
+    assert.equal(hardened, true, `Windows ACL hardening stages: ${JSON.stringify(nativeCalls)}`);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
